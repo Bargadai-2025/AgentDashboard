@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  // Prevent Next.js from bundling server-only Node packages (cloudinary, mongoose)
+  serverExternalPackages: ["cloudinary", "mongoose"],
 };
 
 export default nextConfig;
