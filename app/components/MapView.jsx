@@ -164,24 +164,44 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
   useEffect(() => {
     if (!mapInstance.current || !isLoaded) return;
 
+    // Clear old polylines (handle array if it exists)
     if (polylineRef.current) {
-      try { window.mappls.remove({ map: mapInstance.current, layer: polylineRef.current }); } catch (e) { }
-      if (polylineRef.current.remove) polylineRef.current.remove();
+      const layers = Array.isArray(polylineRef.current) ? polylineRef.current : [polylineRef.current];
+      layers.forEach(layer => {
+        try { window.mappls.remove({ map: mapInstance.current, layer }); } catch (e) { }
+        if (layer.remove) layer.remove();
+      });
       polylineRef.current = null;
     }
 
     if (routePath?.length > 0) {
       try {
-        polylineRef.current = new window.mappls.Polyline({
+        // We create TWO polylines: 
+        // 1. A thicker white line (casing)
+        // 2. A thinner green line (the actual route)
+        // This makes the route pop on a dark map.
+
+        const casing = new window.mappls.Polyline({
+          map: mapInstance.current,
+          path: routePath,
+          strokeColor: "#ffffff",
+          strokeWeight: 9,
+          strokeOpacity: 0.25,
+        });
+
+        const mainLine = new window.mappls.Polyline({
           map: mapInstance.current,
           path: routePath,
           strokeColor: "#24aa4d",
           strokeWeight: 5,
-          strokeOpacity: 0.9,
+          strokeOpacity: 1,
         });
+
+        polylineRef.current = [casing, mainLine];
       } catch (e) { console.warn("Polyline error:", e); }
     }
   }, [routePath, isLoaded]);
+
 
   return (
     <div

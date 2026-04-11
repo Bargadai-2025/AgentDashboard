@@ -50,35 +50,37 @@ function permute(arr) {
  */
 export function optimizeRoute(points) {
   // Trivial cases — nothing to optimize
-  if (!points || points.length <= 2) {
+  if (!points || points.length <= 3) {
     return points.map((_, i) => i);
   }
 
   const startIdx = 0;
-  const flexibleIndices = Array.from({ length: points.length - 1 }, (_, i) => i + 1);
+  const endIdx = points.length - 1;
+  
+  // Flexible indices are everything between start and end
+  const flexibleIndices = Array.from({ length: points.length - 2 }, (_, i) => i + 1);
 
-  let bestRoute = [startIdx, ...flexibleIndices];
+  let bestRoute = [startIdx, ...flexibleIndices, endIdx];
   let minDistance = Infinity;
 
+  // For very small sets (<= 8 stops), we can use brute force permutations
+  // For larger sets, this will be slow, but for 5-6 customers it's perfect.
   for (const perm of permute(flexibleIndices)) {
 
-    const route = [startIdx, ...perm];
+    const currentRoute = [startIdx, ...perm, endIdx];
     let totalDistance = 0;
 
-    // Calculate distance between each sequential stop
-    for (let i = 0; i < route.length - 1; i++) {
-      totalDistance += haversineDistance(points[route[i]], points[route[i + 1]]);
+    // Calculate distance between each sequential stop including the return leg
+    for (let i = 0; i < currentRoute.length - 1; i++) {
+      totalDistance += haversineDistance(points[currentRoute[i]], points[currentRoute[i + 1]]);
     }
     
-    // SENIOR FIX: Also add the distance from the LAST stop BACK to the START (Office)
-    // This ensures optimization is based on the full circular loop.
-    totalDistance += haversineDistance(points[route[route.length - 1]], points[startIdx]);
-
     if (totalDistance < minDistance) {
       minDistance = totalDistance;
-      bestRoute = route;
+      bestRoute = currentRoute;
     }
   }
 
   return bestRoute;
 }
+

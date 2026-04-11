@@ -94,13 +94,32 @@ export default function MapDashboard({ allAgents }) {
         const data = await res.json();
 
         if (data.path) {
-          setRoutePath(data.path.map((c) => ({ lat: c[0], lng: c[1] })));
+          const path = data.path.map((c) => ({ lat: c[0], lng: c[1] }));
+          console.log(`[MapDashboard] Route received: ${path.length} points.`);
+          setRoutePath(path);
+        }
+
+        if (data.legs && data.optimizedOrder) {
+          const distances = {};
+          // Leg 0 goes from points[0] (Office) to points[optimizedOrder[1]]
+          // Note: points was [Office, ...custs, Office]
+          // optimizedOrder indices refer to this points array.
+          data.optimizedOrder.forEach((originalIdx, visitIdx) => {
+            if (visitIdx > 0 && visitIdx < data.optimizedOrder.length - 1) {
+              const custId = pts[originalIdx].data?._id;
+              if (custId) {
+                distances[custId] = data.legs[visitIdx - 1]?.distance?.toFixed(1);
+              }
+            }
+          });
+          setCustomerDistances(prev => ({ ...prev, ...distances }));
+          setTripSummary(data);
         }
         if (data.optimizedOrder) setOptimizedOrder(data.optimizedOrder);
-        if (data.legs) setTripSummary(data);
       } catch (err) {
         console.warn("[MapDashboard] Route fetch failed:", err.message);
       }
+
     }
   }, [computeDistances]);
 
@@ -145,19 +164,39 @@ export default function MapDashboard({ allAgents }) {
 
   // ── Map marker click dispatcher ───────────────────────────────────────────
 
-  const handleMarkerClick = (pointData) => {
-    if (view === VIEW.OVERVIEW && pointData.isAgent) handleAgentSelect(pointData.data);
-    if (view === VIEW.AGENT && !pointData.isAgent && !pointData.isOffice) {
-      setSelectedCustomer(pointData.data);
-      setView(VIEW.CUSTOMER);
-      // Focus on customer + agent
-      setMapPoints([
-        { lat: selectedAgent.location.lat, lng: selectedAgent.location.lng, data: selectedAgent, isAgent: true },
-        { lat: pointData.data.location.lat, lng: pointData.data.location.lng, data: pointData.data }
-      ]);
+  const handleMarkerClick = async (pointData) => {
+    if (view === VIEW.OVERVIEW && pointData.isAgent) {
+      handleAgentSelect(pointData.data);
+      return;
     }
 
+    if (view === VIEW.AGENT && !pointData.isAgent && !pointData.isOffice) {
+      const customer = pointData.data;
+      setSelectedCustomer(customer);
+      setView(VIEW.CUSTOMER);
+
+      // 1. Focus markers
+      const agentPt = { lat: selectedAgent.location.lat, lng: selectedAgent.location.lng, data: selectedAgent, isAgent: true };
+      const customerPt = { lat: customer.location.lat, lng: customer.location.lng, data: customer };
+      setMapPoints([agentPt, customerPt]);
+
+      // 2. Fetch specific route for Agent -> Customer
+      try {
+        const res = await fetch("/api/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ points: [agentPt, customerPt] }),
+        });
+        const data = await res.json();
+        if (data.path) {
+          setRoutePath(data.path.map((c) => ({ lat: c[0], lng: c[1] })));
+        }
+      } catch (err) {
+        console.warn("[MapDashboard] Single route fetch failed:", err);
+      }
+    }
   };
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
