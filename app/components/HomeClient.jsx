@@ -1,4 +1,4 @@
-"use client";
+// "use client";
 // ─────────────────────────────────────────────────────────────────────────────
 // HomeClient.jsx — Client Component
 //
@@ -7,7 +7,8 @@
 // Receives pre-fetched `allAgents` data as a prop from the Server Component.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Suspense } from "react";
+"use client";
+
 import dynamic from "next/dynamic";
 
 const MapDashboard = dynamic(
@@ -30,9 +31,7 @@ const MapDashboard = dynamic(
 export default function HomeClient({ allAgents }) {
   return (
     <div className="w-full h-full bg-black font-sans">
-      <Suspense fallback={null}>
-        <MapDashboard allAgents={allAgents} />
-      </Suspense>
+      <MapDashboard allAgents={allAgents} />
     </div>
   );
 }
