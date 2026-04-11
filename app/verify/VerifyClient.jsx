@@ -86,7 +86,7 @@ export default function VerifyClient() {
     const searchParams = useSearchParams();
     const [loanSearch, setLoanSearch] = useState("");
     const [error, setError] = useState("");
-    
+
     // Core state
     const [foundCustomer, setFoundCustomer] = useState(null);
     const [foundAgent, setFoundAgent] = useState(null);
@@ -105,7 +105,7 @@ export default function VerifyClient() {
     const livenessIntervalRef = useRef(null);
 
     // ── Effects ─────────────────────────────────────────────────────────────
-    
+
     // Auto-fill loan search from URL ?loan=...
     useEffect(() => {
         const loanParam = searchParams?.get("loan");
@@ -141,7 +141,7 @@ export default function VerifyClient() {
     const handleSearch = async (e) => {
         e.preventDefault();
         setError("");
-        
+
         try {
             const res = await fetch("/api/agents/with-customers");
             const json = await res.json();
@@ -222,7 +222,7 @@ export default function VerifyClient() {
                     stepCompleted = true;
                     currentStepNum++;
                     setLivenessStep(currentStepNum);
-                    
+
                     if (currentStepNum < LIVENESS_TASKS.length) {
                         stepCompleted = false;
                     } else {
@@ -302,7 +302,7 @@ export default function VerifyClient() {
     // ─────────────────────────────────────────────────────────────────────────────
     return (
         <div className="fixed inset-0 bg-[#000] font-sans selection:bg-[#24aa4d]/30 overflow-hidden flex flex-col">
-            
+
             {/* Header */}
             <header className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-b border-white/5 bg-black/50 backdrop-blur-xl z-20">
                 <div className="flex items-center gap-2">
@@ -317,19 +317,19 @@ export default function VerifyClient() {
 
             {/* Scrollable Main Area */}
             <main className="flex-1 overflow-y-auto w-full max-w-lg mx-auto p-6 md:p-10 hide-scrollbar flex flex-col items-center py-12 md:py-20">
-                
+
                 <AnimatePresence mode="wait">
-                    
+
                     {/* STEP 1: Search */}
                     {!foundCustomer && !verificationResult && (
-                        <motion.div 
+                        <motion.div
                             key="search"
                             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
                             className="w-full space-y-12"
                         >
                             <div className="text-center space-y-4">
                                 <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter leading-[0.9]">
-                                    Identity <br/> <span className="text-[#24aa4d]">Assurance.</span>
+                                    Identity <br /> <span className="text-[#24aa4d]">Assurance.</span>
                                 </h1>
                                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.3em]">
                                     Field Agent Liveness Portal
@@ -339,12 +339,12 @@ export default function VerifyClient() {
 
                             <div className="p-1.5 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-3xl">
                                 <form onSubmit={handleSearch} className="relative flex items-center">
-                                    <input 
-                                        type="text" placeholder="ENTER LOAN NUMBER..." 
+                                    <input
+                                        type="text" placeholder="ENTER LOAN NUMBER..."
                                         className="flex-1 bg-transparent px-6 py-5 text-sm font-black text-white placeholder:text-gray-700 outline-none uppercase tracking-widest"
                                         value={loanSearch} onChange={e => setLoanSearch(e.target.value)} required
                                     />
-                                    <button 
+                                    <button
                                         type="submit"
                                         className="h-[52px] px-8 mr-1 rounded-2xl bg-[#24aa4d] text-black font-black text-[10px] uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-[#24aa4d]/20"
                                     >
@@ -358,7 +358,7 @@ export default function VerifyClient() {
 
                     {/* STEP 2: Agent Preview & Start */}
                     {foundCustomer && !cameraActive && !verificationResult && (
-                        <motion.div 
+                        <motion.div
                             key="preview"
                             initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -20 }}
                             className="w-full space-y-6"
@@ -366,7 +366,7 @@ export default function VerifyClient() {
                             <div className="relative p-8 rounded-[40px] bg-white/[0.03] border border-white/10 overflow-hidden text-center">
                                 {/* Decor */}
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-[#24aa4d]/10 blur-[60px] rounded-full" />
-                                
+
                                 <div className="relative mb-6 mx-auto w-24 h-24 p-1 rounded-full border border-white/10">
                                     {foundAgent.image ? (
                                         <img src={foundAgent.image} alt="Agent" className="w-full h-full rounded-full object-cover" />
@@ -378,14 +378,14 @@ export default function VerifyClient() {
 
                                 <h2 className="text-2xl font-black text-white tracking-tight">{foundAgent.name}</h2>
                                 <p className="text-[10px] text-[#24aa4d] font-bold uppercase tracking-[0.2em] mt-1">Matched Field Agent</p>
-                                
+
                                 <div className="mt-8 pt-8 border-t border-white/5 space-y-1">
                                     <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Assigned to Customer</p>
                                     <p className="text-sm font-bold text-white uppercase">{foundCustomer.name}</p>
                                 </div>
                             </div>
 
-                            <button 
+                            <button
                                 onClick={startCamera}
                                 className="w-full py-6 rounded-[30px] bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-[#24aa4d] hover:text-white transition-all transform active:scale-95 shadow-xl shadow-white/5"
                             >
@@ -397,7 +397,7 @@ export default function VerifyClient() {
 
                     {/* STEP 3: Camera & Tasks */}
                     {cameraActive && !verificationResult && (
-                        <motion.div 
+                        <motion.div
                             key="camera"
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             className="w-full space-y-8"
@@ -405,20 +405,20 @@ export default function VerifyClient() {
                             {/* Video Circle Container */}
                             <div className="relative aspect-square w-full max-w-[340px] mx-auto">
                                 <div className={`absolute inset-0 rounded-full border-2 transition-all duration-300 ${isVerifying ? 'border-[#24aa4d] shadow-[0_0_30px_rgba(36,170,77,0.3)]' : 'border-white/10'}`} />
-                                
+
                                 <div className="absolute inset-4 rounded-full overflow-hidden bg-white/5">
-                                    <video 
-                                        ref={videoRef} autoPlay playsInline muted 
+                                    <video
+                                        ref={videoRef} autoPlay playsInline muted
                                         className="w-full h-full object-cover transform -scale-x-100 scale-125"
                                     />
-                                    
+
                                     <AnimatePresence>
                                         {!isVerifying && !livenessPassed && (
-                                            <motion.div 
+                                            <motion.div
                                                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                                                 className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-8 text-center"
                                             >
-                                                <button 
+                                                <button
                                                     onClick={runLiveness}
                                                     className="w-20 h-20 rounded-full bg-[#24aa4d] text-black font-black text-[10px] uppercase p-4 leading-tight shadow-2xl"
                                                 >
@@ -442,7 +442,7 @@ export default function VerifyClient() {
 
                                     {/* Success Indicator */}
                                     {livenessPassed && (
-                                        <motion.div 
+                                        <motion.div
                                             initial={{ scale: 0 }} animate={{ scale: 1 }}
                                             className="absolute inset-0 bg-[#24aa4d]/90 flex flex-col items-center justify-center text-black"
                                         >
@@ -465,15 +465,15 @@ export default function VerifyClient() {
                             {/* Task Dots */}
                             <div className="flex justify-center gap-3">
                                 {LIVENESS_TASKS.map((_, i) => (
-                                    <div 
-                                        key={i} 
-                                        className={`h-1.5 rounded-full transition-all duration-500 ${i < livenessStep ? 'w-8 bg-[#24aa4d]' : i === livenessStep && isVerifying ? 'w-8 bg-[#24aa4d]/40 animate-pulse' : 'w-1.5 bg-white/10'}`} 
+                                    <div
+                                        key={i}
+                                        className={`h-1.5 rounded-full transition-all duration-500 ${i < livenessStep ? 'w-8 bg-[#24aa4d]' : i === livenessStep && isVerifying ? 'w-8 bg-[#24aa4d]/40 animate-pulse' : 'w-1.5 bg-white/10'}`}
                                     />
                                 ))}
                             </div>
 
                             {livenessPassed && (
-                                <button 
+                                <button
                                     onClick={captureFinal}
                                     className="w-full py-6 rounded-[30px] bg-[#24aa4d] text-black font-black text-sm uppercase tracking-widest hover:brightness-110 shadow-2xl shadow-[#24aa4d]/20"
                                 >
@@ -487,7 +487,7 @@ export default function VerifyClient() {
 
                     {/* STEP 4: Final Results */}
                     {verificationResult && (
-                        <motion.div 
+                        <motion.div
                             key="result"
                             initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }}
                             className="w-full space-y-6"
@@ -519,8 +519,8 @@ export default function VerifyClient() {
                                     </div>
                                     {/* Progress bar */}
                                     <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                                        <motion.div 
-                                            initial={{ width: 0 }} animate={{ width: `${verificationResult.finalScore}%` }} 
+                                        <motion.div
+                                            initial={{ width: 0 }} animate={{ width: `${verificationResult.finalScore}%` }}
                                             className={`h-full ${verificationResult.isVerified ? 'bg-[#24aa4d]' : 'bg-red-500'}`}
                                         />
                                     </div>
@@ -528,7 +528,7 @@ export default function VerifyClient() {
                             </div>
 
                             <div className="space-y-3">
-                                <button 
+                                <button
                                     onClick={() => window.location.href = `/?verified=${foundCustomer.loan}`}
                                     className="w-full py-6 rounded-[30px] bg-[#24aa4d] text-black font-black text-sm uppercase tracking-widest shadow-xl shadow-[#24aa4d]/20"
                                 >
@@ -543,7 +543,7 @@ export default function VerifyClient() {
             </main>
 
             <ToastContainer position="bottom-center" theme="dark" hideProgressBar pauseOnHover={false} newestOnTop />
-            
+
             {/* Global Style overrides for hide-scrollbar */}
             <style jsx global>{`
                 .hide-scrollbar::-webkit-scrollbar { display: none; }

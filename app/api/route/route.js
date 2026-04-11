@@ -71,7 +71,7 @@ export async function POST(req) {
     // ── 3. New Atomic Request ───────────────────────────────────────────────
     const executeRequest = (async () => {
       const apiKey =
-        process.env.NEXT_PUBLIC_MAPPLS_API_KEY || "";
+        process.env.MAPPLS_API_KEY || process.env.NEXT_PUBLIC_MAPPLS_API_KEY || "";
 
       // LOCAL optimization (zero API hits) — reorder stops for shortest path
       const optimizedOrder = optimizeRoute(points);

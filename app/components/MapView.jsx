@@ -176,14 +176,14 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
 
     if (routePath?.length > 0) {
       try {
-        // We create TWO polylines: 
-        // 1. A thicker white line (casing)
-        // 2. A thinner green line (the actual route)
-        // This makes the route pop on a dark map.
+        console.log(`[MapView] Creating polyline with ${routePath.length} points.`);
+        // IMPORTANT: Mappls V3 SDK (GL-based) often prefers [lng, lat] arrays 
+        // to match the map center and GL layer standards.
+        const formattedPath = routePath.map(p => [p.lng, p.lat]);
 
         const casing = new window.mappls.Polyline({
           map: mapInstance.current,
-          path: routePath,
+          path: formattedPath,
           strokeColor: "#ffffff",
           strokeWeight: 9,
           strokeOpacity: 0.25,
@@ -191,15 +191,18 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
 
         const mainLine = new window.mappls.Polyline({
           map: mapInstance.current,
-          path: routePath,
+          path: formattedPath,
           strokeColor: "#24aa4d",
-          strokeWeight: 5,
+          strokeWeight: 7,
           strokeOpacity: 1,
         });
 
         polylineRef.current = [casing, mainLine];
-      } catch (e) { console.warn("Polyline error:", e); }
+        console.log("[MapView] Polyline layers added to map.");
+      } catch (e) { console.error("[MapView] Polyline error:", e); }
     }
+
+
   }, [routePath, isLoaded]);
 
 
