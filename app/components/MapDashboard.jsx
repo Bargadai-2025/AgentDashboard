@@ -23,8 +23,14 @@ import { OFFICE } from "../components/staticData";
 const VIEW = { OVERVIEW: "overview", AGENT: "agent", CUSTOMER: "customer" };
 
 export default function MapDashboard({ allAgents }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  if (!mounted) return null;
+
 
   // ── UI State ──────────────────────────────────────────────────────────────
   const [view, setView] = useState(VIEW.OVERVIEW);

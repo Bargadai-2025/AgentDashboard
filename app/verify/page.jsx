@@ -521,6 +521,7 @@
 // }
 // app/verify/page.tsx (Integrated Version)
 "use client";
+export const dynamic = "force-dynamic";
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ToastContainer, toast } from "react-toastify";
@@ -600,13 +601,20 @@ const LIVENESS_TASKS = [
 ];
 
 export default function AgentVerificationPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const searchParams = useSearchParams();
   const [loanSearch, setLoanSearch] = useState("");
+
   const [error, setError] = useState("");
   const [foundCustomer, setFoundCustomer] = useState(null);
   const [foundAgent, setFoundAgent] = useState(null);
 
+  if (!mounted) return null;
+
   // Camera & Liveness States
+
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedImage, setCapturedImage] = useState(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -1052,10 +1060,10 @@ export default function AgentVerificationPage() {
                     <div
                       key={task.id}
                       className={`w-3 h-3 rounded-full transition-all ${idx < livenessStep
-                          ? "bg-green-500"
-                          : idx === livenessStep
-                            ? "bg-yellow-500 animate-pulse"
-                            : "bg-gray-600"
+                        ? "bg-green-500"
+                        : idx === livenessStep
+                          ? "bg-yellow-500 animate-pulse"
+                          : "bg-gray-600"
                         }`}
                     />
                   ))}
