@@ -14,7 +14,7 @@ import HomeClient from "./components/HomeClient";
 async function fetchAgentsWithCustomers() {
   try {
     const res = await fetch(
-      `${process.env.BASE_URL || "http://localhost:3000"}/api/agents/with-customers`,
+      `${process.env.BASE_URL}/api/agents/with-customers`,
       { cache: "no-store" }
     );
 
