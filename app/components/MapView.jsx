@@ -159,50 +159,74 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [points, result, isLoaded]);
 
-  // ── EFFECT B: Polyline ONLY ───────────────────────────────────────────────
-  // No bounds update — never re-zooms the map.
+  // ── EFFECT B: Polyline/Route Rendering ────────────────────────────────────
+  // Uses native GL Layers for maximum reliability and performance.
   useEffect(() => {
-    if (!mapInstance.current || !isLoaded) return;
+    if (!mapInstance.current || !isLoaded || !routePath) return;
 
-    // Clear old polylines (handle array if it exists)
-    if (polylineRef.current) {
-      const layers = Array.isArray(polylineRef.current) ? polylineRef.current : [polylineRef.current];
-      layers.forEach(layer => {
-        try { window.mappls.remove({ map: mapInstance.current, layer }); } catch (e) { }
-        if (layer.remove) layer.remove();
-      });
-      polylineRef.current = null;
-    }
+    const map = mapInstance.current;
 
-    if (routePath?.length > 0) {
+    // Helper to add layers once the style is ready
+    const addRouteLayers = () => {
+      // 1. Cleanup old layers/sources
       try {
-        console.log(`[MapView] Creating polyline with ${routePath.length} points.`);
-        // IMPORTANT: Mappls V3 SDK (GL-based) often prefers [lng, lat] arrays 
-        // to match the map center and GL layer standards.
-        const formattedPath = routePath.map(p => [p.lng, p.lat]);
+        if (map.getLayer("route-casing")) map.removeLayer("route-casing");
+        if (map.getLayer("route-line")) map.removeLayer("route-line");
+        if (map.getSource("route-source")) map.removeSource("route-source");
+      } catch (e) { }
 
-        const casing = new window.mappls.Polyline({
-          map: mapInstance.current,
-          path: formattedPath,
-          strokeColor: "#ffffff",
-          strokeWeight: 9,
-          strokeOpacity: 0.25,
+      if (routePath.length === 0) return;
+
+      try {
+        console.log(`[MapView] Rendering road path: ${routePath.length} nodes.`);
+        const coordinates = routePath.map(p => [p.lng, p.lat]);
+
+        map.addSource("route-source", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: coordinates }
+          }
         });
 
-        const mainLine = new window.mappls.Polyline({
-          map: mapInstance.current,
-          path: formattedPath,
-          strokeColor: "#24aa4d",
-          strokeWeight: 7,
-          strokeOpacity: 1,
+        // Outer white glow/casing
+        map.addLayer({
+          id: "route-casing",
+          type: "line",
+          source: "route-source",
+          paint: {
+            "line-color": "#ffffff",
+            "line-width": 10,
+            "line-opacity": 0.2
+          },
+          layout: { "line-join": "round", "line-cap": "round" }
         });
 
-        polylineRef.current = [casing, mainLine];
-        console.log("[MapView] Polyline layers added to map.");
-      } catch (e) { console.error("[MapView] Polyline error:", e); }
+        // Main green on-road line
+        map.addLayer({
+          id: "route-line",
+          type: "line",
+          source: "route-source",
+          paint: {
+            "line-color": "#24aa4d",
+            "line-width": 6,
+            "line-opacity": 1
+          },
+          layout: { "line-join": "round", "line-cap": "round" }
+        });
+
+        console.log("[MapView] Road path layers added successfully.");
+      } catch (e) {
+        console.error("[MapView] Native layer error:", e);
+      }
+    };
+
+    // If style isn't ready, wait for it
+    if (!map.isStyleLoaded()) {
+      map.once("style.load", addRouteLayers);
+    } else {
+      addRouteLayers();
     }
-
-
   }, [routePath, isLoaded]);
 
 
@@ -215,3 +239,4 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
     />
   );
 }
+
