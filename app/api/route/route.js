@@ -85,12 +85,13 @@ export async function POST(req) {
 
       const routeUrl =
         `https://apis.mappls.com/advancedmaps/v1/${apiKey}/route_adv/driving/${optimizedCoords}` +
-        `?geometries=geojson&overview=full`;
+        `?geometries=geojson&overview=full&steps=true`;
 
       globalHitCount++;
       console.log(
-        `[ROUTE] [${logId}] [Hit #${globalHitCount}] 🌍 Fetching Mappls route...`
+        `[ROUTE] [${logId}] [Hit #${globalHitCount}] 🌍 Fetching Mappls route (with steps)...`
       );
+
 
       const routeRes = await fetch(routeUrl, { cache: "no-store" });
 
@@ -113,9 +114,29 @@ export async function POST(req) {
       const route = routeData.routes[0];
 
       // ── Shape the Result ────────────────────────────────────────────────
-      // Convert Mappls [lng, lat] coordinates to Leaflet/Mappls SDK [lat, lng]
+      // We aggregate coordinates from all legs to ensure no segment is missing
+      const allCoords = [];
+      if (route.legs) {
+        route.legs.forEach(leg => {
+          if (leg.steps) {
+            leg.steps.forEach(step => {
+              if (step.geometry?.coordinates) {
+                step.geometry.coordinates.forEach(c => allCoords.push([c[1], c[0]]));
+              }
+            });
+          } else if (leg.annotation?.nodes) {
+             // Fallback for some API versions
+          }
+        });
+      }
+      
+      // If legs aggregation failed, fallback to the overview geometry
+      const finalPath = allCoords.length > 0 
+        ? allCoords 
+        : (route.geometry?.coordinates?.map((c) => [c[1], c[0]]) || []);
+
       const finalResult = {
-        path: route.geometry.coordinates.map((c) => [c[1], c[0]]),
+        path: finalPath,
         distance: route.distance / 1000,       // metres → km
         time: route.duration,                  // seconds
         legs: (route.legs || []).map((leg) => ({
@@ -125,6 +146,7 @@ export async function POST(req) {
         optimizedOrder,
         status: "SUCCESS",
       };
+
 
       // Populate cache for future identical requests
       responseCache.set(payloadHash, { data: finalResult, timestamp: Date.now() });
