@@ -142,7 +142,13 @@ export default function MapDashboard({ allAgents }) {
     if (view === VIEW.AGENT && !pointData.isAgent && !pointData.isOffice) {
       setSelectedCustomer(pointData.data);
       setView(VIEW.CUSTOMER);
+      // Focus on customer + agent
+      setMapPoints([
+        { lat: selectedAgent.location.lat, lng: selectedAgent.location.lng, data: selectedAgent, isAgent: true },
+        { lat: pointData.data.location.lat, lng: pointData.data.location.lng, data: pointData.data }
+      ]);
     }
+
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -278,7 +284,16 @@ export default function MapDashboard({ allAgents }) {
                         <motion.div
                           key={cust._id}
                           initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}
-                          onClick={() => { setSelectedCustomer(cust); setView(VIEW.CUSTOMER); }}
+                          onClick={() => { 
+                            setSelectedCustomer(cust); 
+                            setView(VIEW.CUSTOMER); 
+                            // Update map points to focus on this customer + agent
+                            setMapPoints([
+                              { lat: selectedAgent.location.lat, lng: selectedAgent.location.lng, data: selectedAgent, isAgent: true },
+                              { lat: cust.location.lat, lng: cust.location.lng, data: cust }
+                            ]);
+                          }}
+
                           className="group p-4 rounded-2xl bg-white/[0.04] border border-white/5 hover:border-[#24aa4d]/40 hover:bg-[#24aa4d]/5 cursor-pointer transition-all"
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -316,12 +331,22 @@ export default function MapDashboard({ allAgents }) {
 
                           {/* Action buttons */}
                           <div className="flex gap-2 mt-3">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); router.push(`/verify?loan=${cust.loan || cust._id}&customerId=${cust._id}`); }}
-                              className="flex-1 py-1.5 text-[10px] font-black uppercase bg-[#24aa4d]/10 text-[#24aa4d] rounded-lg hover:bg-[#24aa4d] hover:text-black transition-all"
-                            >
-                              Verify
-                            </button>
+                            {cust.verifiedAgentImage ? (
+                              <button
+                                disabled
+                                className="flex-1 py-1.5 text-[10px] font-black uppercase bg-[#24aa4d]/20 text-[#24aa4d] rounded-lg cursor-default"
+                              >
+                                Verified
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); router.push(`/verify?loan=${cust.loan || cust._id}&customerId=${cust._id}`); }}
+                                className="flex-1 py-1.5 text-[10px] font-black uppercase bg-[#24aa4d]/10 text-[#24aa4d] rounded-lg hover:bg-[#24aa4d] hover:text-black transition-all"
+                              >
+                                Verify
+                              </button>
+                            )}
+
                             <button
                               onClick={(e) => e.stopPropagation()}
                               className="flex-1 py-1.5 text-[10px] font-black uppercase bg-white/5 text-gray-400 rounded-lg hover:bg-white/10 transition-all"
@@ -346,11 +371,24 @@ export default function MapDashboard({ allAgents }) {
               {/* ── PINNED HEADER ────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-gradient-to-r from-[#24aa4d]/10 to-transparent border-b border-white/5">
                 <button
-                  onClick={() => { setSelectedCustomer(null); setView(VIEW.AGENT); }}
+                  onClick={() => { 
+                    setSelectedCustomer(null); 
+                    setView(VIEW.AGENT); 
+                    // Restore full agent points
+                    const custs = (selectedAgent.customers || [])
+                      .filter((c) => c.location?.lat && c.location?.lng)
+                      .map((c) => ({ lat: c.location.lat, lng: c.location.lng, data: c }));
+                    setMapPoints([
+                      { lat: selectedAgent.location.lat, lng: selectedAgent.location.lng, data: selectedAgent, isAgent: true },
+                      { lat: OFFICE.lat, lng: OFFICE.lng, name: OFFICE.name, isOffice: true },
+                      ...custs
+                    ]);
+                  }}
                   className="w-full flex items-center gap-2 px-4 pt-4 pb-2 text-[10px] font-black text-[#24aa4d] uppercase tracking-widest hover:opacity-70 transition-opacity"
                 >
                   ← Back to {selectedAgent.name}
                 </button>
+
                 <div className="flex items-center gap-3 px-4 pb-4">
                   {selectedAgent.image
                     ? <img src={selectedAgent.image} alt={selectedAgent.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />

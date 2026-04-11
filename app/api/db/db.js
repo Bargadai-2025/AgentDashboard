@@ -1,33 +1,25 @@
 import mongoose from "mongoose";
-import dns from "dns";
-
-dns.setServers([
-    "8.8.8.8",
-    "1.1.1.1"
-]);
 
 let isConnected = false;
 
 export async function DBConnection() {
-
     if (isConnected) {
         return;
     }
 
     try {
-
         const res = await mongoose.connect(
-            "mongodb+srv://yj0034046_db_user:BAC2cB4Ss5vumGUW@agentdashboard.hsoipy2.mongodb.net/agentsdb"
+            process.env.NEXT_PUBLIC_DB_URL,
+            {
+                serverSelectionTimeoutMS: 10000, // 10 seconds timeout
+            }
         );
 
-        if (res) {
-            isConnected = true;
-            console.log("DB Connected...");
-        }
-
+        
+        isConnected = !!res;
+        console.log("DB Connected successfully");
     } catch (error) {
-        console.log(error);
-        console.log("DB not connected...");
+        console.error("DB Connection Error:", error);
+        throw error; // Throwing error so the caller knows it failed
     }
-
 }

@@ -22,7 +22,7 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
     if (!isLoaded || !mapRef.current || mapInstance.current) return;
     try {
       mapInstance.current = new window.mappls.Map("map-container", {
-        center: [19.113, 72.918],
+        center: [72.918, 19.113], // Swapped to [lng, lat]
         zoom: 10,
       });
     } catch (e) {
@@ -136,14 +136,15 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
       // Verify min/max are finite numbers
       if (!isFinite(minLat) || !isFinite(maxLat)) return;
 
-      if (minLat === maxLat && minLng === maxLng) {
-        mapInstance.current.setCenter([minLat, minLng]);
-        mapInstance.current.setZoom(15);
+      if (strictPoints.length === 1) {
+        mapInstance.current.setCenter([minLng, minLat]); // [lng, lat]
+        mapInstance.current.setZoom(14);
       } else {
+        // Mappls fitBounds expects [[lng, lat], [lng, lat]] or similar LngLatBounds
         mapInstance.current.fitBounds(
-          [[minLat, minLng], [maxLat, maxLng]],
+          [[minLng, minLat], [maxLng, maxLat]], // Correct order [lng, lat]
           {
-            padding: { top: 70, bottom: 70, left: 70, right: 70 },
+            padding: { top: 70, bottom: 70, left: 70, right: 380 }, // Added right padding for sidebar
             maxZoom: 15,
             animate: true
           }
@@ -151,8 +152,9 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
       }
     } catch (e) {
       console.warn("[MapView] fitBounds failed, falling back to center:", e);
-      if (validPoints[0]) mapInstance.current.setCenter([validPoints[0].lat, validPoints[0].lng]);
+      if (validPoints[0]) mapInstance.current.setCenter([validPoints[0].lng, validPoints[0].lat]);
     }
+
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [points, result, isLoaded]);

@@ -1,6 +1,6 @@
 // Utility to convert Lat/Lng to a human-readable address using Mappls API
 export async function reverseGeocode(lat, lng) {
-    const apiKey = process.env.MAPPLS_API_KEY || "c0ae557754e8913f692841c11b9d979c";
+    const apiKey = process.env.NEXT_PUBLIC_MAPPLS_API_KEY || "";
     const url = `https://apis.mappls.com/advancedmaps/v1/${apiKey}/rev_geocode?lat=${lat}&lng=${lng}`;
 
     try {

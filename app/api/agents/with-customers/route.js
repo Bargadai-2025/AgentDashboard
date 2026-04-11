@@ -41,10 +41,11 @@ function parseLocation(raw) {
 }
 
 export async function GET() {
-  await DBConnection();
-
   try {
+    await DBConnection();
+
     // Populate customers so we get the full customer docs (name, location, etc.)
+
     const rawAgents = await AgentModel.find().populate("customers").lean();
 
     // Shape each agent into a clean, frontend-ready object
