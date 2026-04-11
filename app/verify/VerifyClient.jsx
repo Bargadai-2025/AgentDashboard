@@ -625,21 +625,28 @@ export default function VerifyClient() {
                                     {verificationResult.finalScore}%
                                 </span>
                             </div>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                onClick={retryVerification}
-                                className="flex-1 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 font-bold py-2 rounded-lg transition-colors"
-                            >
-                                Retry
-                            </button>
-                            <button
-                                onClick={resetVerification}
-                                className="flex-1 bg-green-500 hover:bg-green-600 font-bold py-2 rounded-lg transition-colors"
-                            >
-                                New Verification
-                            </button>
+                            <div className="flex flex-col gap-3">
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={retryVerification}
+                                        className="flex-1 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 font-bold py-2 rounded-lg transition-colors"
+                                    >
+                                        Retry
+                                    </button>
+                                    <button
+                                        onClick={resetVerification}
+                                        className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 font-bold py-2 rounded-lg transition-colors"
+                                    >
+                                        New Search
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={() => window.location.href = `/?verified=${foundCustomer.loan}`}
+                                    className="w-full bg-[#24aa4d] hover:bg-[#1e8a3e] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#24aa4d]/20"
+                                >
+                                    <span className="text-lg">🏠</span> Return to Dashboard
+                                </button>
+                            </div>
                         </div>
                     </motion.div>
                 )}
