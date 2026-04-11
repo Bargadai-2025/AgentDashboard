@@ -1,6 +1,6 @@
-import { dbConnect } from "../../db/db";
-import Customer from "../../db/models/customer.models";
-import { NextResponse } from "next/server";
+import { DBConnection } from "../../db/db.js";
+import Customer from "../../db/models/customer.models.js";
+import { NextResponse } from "next/server.js";
 
 /**
  * POST /api/customer/reset-verification
@@ -15,7 +15,7 @@ export async function POST(req) {
       return NextResponse.json({ error: "Customer ID is required" }, { status: 400 });
     }
 
-    await dbConnect();
+    await DBConnection();
 
     const customer = await Customer.findByIdAndUpdate(
       customerId,
@@ -27,10 +27,10 @@ export async function POST(req) {
       return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: "Verification reset successfully",
-      customer 
+      customer
     });
   } catch (error) {
     console.error("[RESET_VERIFICATION] Error:", error);
