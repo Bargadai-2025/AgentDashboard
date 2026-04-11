@@ -416,12 +416,6 @@ export default function MapDashboard({ allAgents }) {
               className="flex-1 flex flex-col overflow-hidden">
 
               {/* ── PINNED HEADER ────────────────────────────────────────── */}
-          {/* ── VIEW 3: Customer Selected ────────────────────────────────── */}
-          {view === VIEW.CUSTOMER && selectedCustomer && selectedAgent && (
-            <motion.div key="customer" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              className="flex-1 flex flex-col overflow-hidden">
-
-              {/* ── PINNED HEADER ────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-gradient-to-r from-[#24aa4d]/10 to-transparent border-b border-white/5">
                 <button
                   onClick={() => handleAgentSelect(selectedAgent)}
@@ -552,7 +546,7 @@ export default function MapDashboard({ allAgents }) {
             </motion.div>
           )}
 
-        </AnimatePresence>
+</AnimatePresence>
       </aside>
     </div>
   );
