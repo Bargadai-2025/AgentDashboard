@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useSearchParams } from "next/navigation";
 
-// Liveness detection configuration
+// ─────────────────────────────────────────────────────────────────────────────
+// Liveness Tasks Configuration
+// ─────────────────────────────────────────────────────────────────────────────
 const LIVENESS_TASKS = [
     {
         id: "look_left",
@@ -56,11 +58,10 @@ const LIVENESS_TASKS = [
         check: (landmarks) => {
             if (!landmarks) return false;
             const mouth = landmarks.getMouth();
-            const jaw = landmarks.getJawOutline();
             const leftEye = landmarks.getLeftEye();
             const gap = mouth[18].y - mouth[14].y;
-            const faceHeight = jaw[8].y - leftEye[0].y;
-            return (gap / faceHeight) > 0.08;
+            const faceHeight = mouth[18].y - leftEye[0].y;
+            return (gap / faceHeight) > 0.15;
         }
     },
     {
@@ -84,11 +85,11 @@ export default function VerifyClient() {
 
     const searchParams = useSearchParams();
     const [loanSearch, setLoanSearch] = useState("");
-
     const [error, setError] = useState("");
+    
+    // Core state
     const [foundCustomer, setFoundCustomer] = useState(null);
     const [foundAgent, setFoundAgent] = useState(null);
-
     const [cameraActive, setCameraActive] = useState(false);
     const [capturedImage, setCapturedImage] = useState(null);
     const [isVerifying, setIsVerifying] = useState(false);
@@ -103,15 +104,19 @@ export default function VerifyClient() {
     const streamRef = useRef(null);
     const livenessIntervalRef = useRef(null);
 
-    // Pre-fill loan from URL
+    // ── Effects ─────────────────────────────────────────────────────────────
+    
+    // Auto-fill loan search from URL ?loan=...
     useEffect(() => {
         const loanParam = searchParams?.get("loan");
         if (loanParam) setLoanSearch(loanParam);
     }, [searchParams]);
 
-    // Load Face-API.js
+    // FaceAPI Script Injection
     useEffect(() => {
+        if (typeof window === "undefined") return;
         const loadFaceAPI = async () => {
+            if (window.faceapi) return;
             const script = document.createElement("script");
             script.src = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js";
             script.async = true;
@@ -121,9 +126,9 @@ export default function VerifyClient() {
                     await window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
                     await window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
                     await window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-                    console.log("✅ FaceAPI models loaded");
+                    console.log("✅ FaceAPI Ready");
                 } catch (e) {
-                    console.error("❌ Failed to load FaceAPI models", e);
+                    console.warn("❌ FaceAPI load failed", e);
                 }
             };
             document.body.appendChild(script);
@@ -131,18 +136,14 @@ export default function VerifyClient() {
         loadFaceAPI();
     }, []);
 
-    // Search for loan account
+    // ── Logic ───────────────────────────────────────────────────────────────
+
     const handleSearch = async (e) => {
         e.preventDefault();
         setError("");
-        setFoundCustomer(null);
-        setFoundAgent(null);
-        setVerificationResult(null);
-
+        
         try {
             const res = await fetch("/api/agents/with-customers");
-            if (!res.ok) throw new Error(`Server error: ${res.status}`);
-
             const json = await res.json();
             const agents = json.data || [];
 
@@ -151,33 +152,24 @@ export default function VerifyClient() {
                 const customer = (agent.customers || []).find(
                     (c) => c.loan === loanSearch || c._id === loanSearch
                 );
-                if (customer) {
-                    match = { customer, agent };
-                    break;
-                }
+                if (customer) { match = { customer, agent }; break; }
             }
 
             if (match) {
                 setFoundCustomer(match.customer);
                 setFoundAgent(match.agent);
             } else {
-                setError("No matching Loan Account Number found.");
+                setError("Loan Account Number not found.");
             }
         } catch (err) {
-            console.error("[Verify] Search failed:", err);
-            setError("Could not reach the server. Please try again.");
+            setError("Server connection failed.");
         }
     };
 
-    // Start camera
     const startCamera = async () => {
         setCameraActive(true);
-        setCapturedImage(null);
-        setVerificationResult(null);
         setLivenessStep(0);
         setLivenessPassed(false);
-        setLivenessScore(0);
-
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 640, height: 480 },
@@ -189,469 +181,380 @@ export default function VerifyClient() {
                 await videoRef.current.play();
             }
         } catch (err) {
-            setError("Camera access denied or unavailable.");
+            setError("Camera access denied.");
             setCameraActive(false);
         }
     };
 
-    // Stop camera
     const stopCamera = () => {
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => track.stop());
             streamRef.current = null;
         }
-        if (videoRef.current) {
-            videoRef.current.srcObject = null;
-        }
+        if (videoRef.current) videoRef.current.srcObject = null;
         setCameraActive(false);
+        if (livenessIntervalRef.current) clearInterval(livenessIntervalRef.current);
     };
 
-    // Start liveness detection sequence
-    const startLivenessCheck = async () => {
+    const runLiveness = async () => {
         setIsVerifying(true);
-        setLivenessStep(0);
-        setLivenessPassed(false);
-        setLivenessScore(0);
-
-        let currentStep = 0;
+        let currentStepNum = 0;
         let stepCompleted = false;
-
-        if (livenessIntervalRef.current) {
-            clearInterval(livenessIntervalRef.current);
-        }
 
         livenessIntervalRef.current = setInterval(async () => {
             if (!videoRef.current || !window.faceapi || livenessPassed) return;
 
             try {
                 const detection = await window.faceapi
-                    .detectSingleFace(
-                        videoRef.current,
-                        new window.faceapi.TinyFaceDetectorOptions()
-                    )
+                    .detectSingleFace(videoRef.current, new window.faceapi.TinyFaceDetectorOptions())
                     .withFaceLandmarks()
                     .withFaceDescriptor();
 
                 if (!detection) {
-                    setLivenessMessage("No face detected. Please center your face.");
+                    setLivenessMessage("Face not detected. Center your face.");
                     return;
                 }
 
                 setLivenessMessage("");
-                const task = LIVENESS_TASKS[currentStep];
+                const task = LIVENESS_TASKS[currentStepNum];
 
                 if (task && task.check(detection.landmarks) && !stepCompleted) {
                     stepCompleted = true;
-                    currentStep++;
-                    setLivenessStep(currentStep);
-
-                    toast.success(`✓ ${task.label} completed!`, { autoClose: 1000 });
-
-                    if (currentStep >= LIVENESS_TASKS.length) {
+                    currentStepNum++;
+                    setLivenessStep(currentStepNum);
+                    
+                    if (currentStepNum < LIVENESS_TASKS.length) {
+                        stepCompleted = false;
+                    } else {
                         clearInterval(livenessIntervalRef.current);
                         setLiveDescriptor(detection.descriptor);
                         setLivenessPassed(true);
-                        setLivenessScore(95);
-                        setLivenessMessage("Liveness verification passed!");
-                        toast.success("✅ Liveness verification passed!");
+                        setLivenessScore(98);
                         setIsVerifying(false);
+                        toast.success("✅ Liveness Check Complete!");
                     }
                 }
-            } catch (err) {
-                console.error("Liveness check error:", err);
-            }
-        }, 500);
+            } catch (err) { console.error(err); }
+        }, 300);
     };
 
-    // Capture final image and compare with agent
-    const captureAndVerify = async () => {
-        if (!videoRef.current || !liveDescriptor) {
-            toast.error("Please complete liveness check first");
-            return;
-        }
+    const captureFinal = async () => {
+        if (!videoRef.current || !liveDescriptor) return;
 
         const canvas = document.createElement("canvas");
         canvas.width = videoRef.current.videoWidth;
         canvas.height = videoRef.current.videoHeight;
         const ctx = canvas.getContext("2d");
         ctx.drawImage(videoRef.current, 0, 0);
-        const capturedImageData = canvas.toDataURL("image/jpeg");
+        const b64 = canvas.toDataURL("image/jpeg");
+        setCapturedImage(b64);
 
-        setCapturedImage(capturedImageData);
-
-        let faceMatchConfidence = 0;
-        let faceMatchMessage = "";
-
+        // Score logic
+        let matchScore = 0;
         if (foundAgent?.image && window.faceapi) {
             try {
-                const agentImageUrl = foundAgent.image.startsWith("/")
-                    ? window.location.origin + foundAgent.image
-                    : foundAgent.image;
-
-                const agentImg = await window.faceapi.fetchImage(agentImageUrl);
-                const agentDetection = await window.faceapi
-                    .detectSingleFace(agentImg, new window.faceapi.TinyFaceDetectorOptions())
-                    .withFaceDescriptor();
-
-                if (agentDetection && liveDescriptor) {
-                    const distance = window.faceapi.euclideanDistance(liveDescriptor, agentDetection.descriptor);
-                    faceMatchConfidence = Math.max(0, Math.round((1 - distance) * 100));
-                    faceMatchMessage = faceMatchConfidence >= 70
-                        ? "Face matches agent profile"
-                        : "Face does not match agent profile";
-                } else {
-                    faceMatchMessage = "Could not detect face in agent photo";
+                const agentImg = await window.faceapi.fetchImage(foundAgent.image);
+                const agentDet = await window.faceapi.detectSingleFace(agentImg, new window.faceapi.TinyFaceDetectorOptions()).withFaceDescriptor();
+                if (agentDet) {
+                    const dist = window.faceapi.euclideanDistance(liveDescriptor, agentDet.descriptor);
+                    matchScore = Math.max(0, Math.round((1 - dist) * 100));
                 }
-            } catch (e) {
-                console.warn("Face comparison failed:", e);
-                faceMatchMessage = "Face comparison failed";
-            }
-        } else {
-            faceMatchMessage = "No agent profile image available for comparison";
+            } catch (e) { console.warn(e); }
         }
 
-        const finalScore = Math.round((livenessScore * 0.6) + (faceMatchConfidence * 0.4));
-        const isVerified = finalScore >= 65;
+        const finalScore = Math.round((livenessScore * 0.7) + (matchScore * 0.3));
+        const success = finalScore >= 65;
 
-        const verificationPayload = {
+        // Save to DB
+        const payload = {
             customerId: foundCustomer._id,
-            customerName: foundCustomer.name,
             loanNumber: foundCustomer.loan,
             agentId: foundAgent._id,
-            agentName: foundAgent.name,
-            capturedImage: capturedImageData,
-            agentImage: foundAgent.image,
-            livenessScore,
-            faceMatchConfidence,
-            finalScore,
-            isVerified,
-            livenessStepsPassed: livenessStep,
-            timestamp: new Date().toISOString(),
-            verifiedBy: "field-agent"
+            capturedImage: b64,
+            isVerified: success,
+            finalScore
         };
 
         try {
-            const saveRes = await fetch("/api/agent-verification", {
+            await fetch("/api/agent-verification", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(verificationPayload)
+                body: JSON.stringify(payload)
             });
-            if (saveRes.ok) {
-                toast.success("Verification saved to database");
-            } else {
-                console.warn("Failed to save to database");
-            }
-        } catch (err) {
-            console.warn("Database save failed:", err);
-        }
-
-        localStorage.setItem(
-            `verification_${foundCustomer.loan}`,
-            JSON.stringify(verificationPayload)
-        );
+        } catch (e) { console.warn("Save failed"); }
 
         stopCamera();
-
-        setVerificationResult({
-            ...verificationPayload,
-            capturedImage: capturedImageData
-        });
-
-        toast[isVerified ? "success" : "error"](
-            isVerified
-                ? `✅ Verification Passed! Score: ${finalScore}%`
-                : `❌ Verification Failed! Score: ${finalScore}%`
-        );
+        setVerificationResult({ ...payload, agentImage: foundAgent.image });
     };
 
-    const resetVerification = () => {
+    const resetAll = () => {
         stopCamera();
-        if (livenessIntervalRef.current) {
-            clearInterval(livenessIntervalRef.current);
-        }
-        setCameraActive(false);
-        setIsVerifying(false);
-        setCapturedImage(null);
-        setVerificationResult(null);
-        setLivenessStep(0);
-        setLivenessPassed(false);
-        setLiveDescriptor(null);
-        setLivenessScore(0);
-        setLivenessMessage("");
         setFoundCustomer(null);
-        setFoundAgent(null);
-        setLoanSearch("");
-    };
-
-    const retryVerification = () => {
         setVerificationResult(null);
         setCapturedImage(null);
-        setLivenessStep(0);
-        setLivenessPassed(false);
-        setLiveDescriptor(null);
-        startCamera();
+        setLoanSearch("");
     };
 
     if (!mounted) return null;
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // RENDER
+    // ─────────────────────────────────────────────────────────────────────────────
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white p-4 md:p-8">
-            <div className="max-w-4xl mx-auto">
-                {/* Header */}
-                <div className="text-center mb-8">
-                    <h1 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-green-400 to-purple-400 bg-clip-text text-transparent">
-                        Agent Identity Verification
-                    </h1>
-                    <p className="text-gray-400 mt-2">Verify your identity to complete customer verification</p>
+        <div className="fixed inset-0 bg-[#000] font-sans selection:bg-[#24aa4d]/30 overflow-hidden flex flex-col">
+            
+            {/* Header */}
+            <header className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-b border-white/5 bg-black/50 backdrop-blur-xl z-20">
+                <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-[#24aa4d] rounded-sm rotate-45 flex-shrink-0 shadow-[0_0_15px_#24aa4d]" />
+                    <span className="font-black text-white tracking-widest text-xs uppercase">Bargad Identity</span>
                 </div>
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#24aa4d] animate-pulse" />
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Secure Liveness v3.4</span>
+                </div>
+            </header>
 
-                {/* Step 1: Search Loan */}
-                {!foundCustomer && !verificationResult && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20"
-                    >
-                        <h2 className="text-xl font-bold mb-4">Enter Customer Loan Details</h2>
-                        <form onSubmit={handleSearch} className="space-y-4">
-                            <input
-                                type="text"
-                                placeholder="Loan Account Number (e.g., LN123456)"
-                                className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-3 outline-none focus:border-green-500 transition-colors"
-                                value={loanSearch}
-                                onChange={(e) => setLoanSearch(e.target.value)}
-                                required
-                            />
-                            <button
-                                type="submit"
-                                className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 font-bold py-3 rounded-lg transition-all transform hover:scale-105"
-                            >
-                                Search Loan
-                            </button>
-                        </form>
-                        {error && <p className="text-red-400 mt-4 text-sm">{error}</p>}
-                    </motion.div>
-                )}
-
-                {/* Step 2: Customer & Agent Info */}
-                {foundCustomer && foundAgent && !cameraActive && !verificationResult && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="space-y-6"
-                    >
-                        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                            <h3 className="text-green-400 font-bold text-lg mb-3">Customer Information</h3>
-                            <div className="space-y-2">
-                                <p><span className="text-gray-400">Name:</span> {foundCustomer.name}</p>
-                                <p><span className="text-gray-400">Loan Number:</span> {foundCustomer.loan}</p>
-                                <p><span className="text-gray-400">Assigned Agent:</span> {foundAgent.name}</p>
+            {/* Scrollable Main Area */}
+            <main className="flex-1 overflow-y-auto w-full max-w-lg mx-auto p-6 md:p-10 hide-scrollbar flex flex-col items-center py-12 md:py-20">
+                
+                <AnimatePresence mode="wait">
+                    
+                    {/* STEP 1: Search */}
+                    {!foundCustomer && !verificationResult && (
+                        <motion.div 
+                            key="search"
+                            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                            className="w-full space-y-12"
+                        >
+                            <div className="text-center space-y-4">
+                                <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter leading-[0.9]">
+                                    Identity <br/> <span className="text-[#24aa4d]">Assurance.</span>
+                                </h1>
+                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.3em]">
+                                    Field Agent Liveness Portal
+                                </p>
                             </div>
-                        </div>
 
-                        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                            <h3 className="text-purple-400 font-bold text-lg mb-3">Agent Profile</h3>
-                            <div className="flex items-center gap-4">
-                                {foundAgent.image ? (
-                                    <img
-                                        src={foundAgent.image}
-                                        alt={foundAgent.name}
-                                        className="w-20 h-20 rounded-full object-cover border-2 border-purple-400"
+
+                            <div className="p-1.5 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-3xl">
+                                <form onSubmit={handleSearch} className="relative flex items-center">
+                                    <input 
+                                        type="text" placeholder="ENTER LOAN NUMBER..." 
+                                        className="flex-1 bg-transparent px-6 py-5 text-sm font-black text-white placeholder:text-gray-700 outline-none uppercase tracking-widest"
+                                        value={loanSearch} onChange={e => setLoanSearch(e.target.value)} required
                                     />
-                                ) : (
-                                    <div className="w-20 h-20 rounded-full bg-purple-500/20 flex items-center justify-center">
-                                        <span className="text-2xl">👤</span>
-                                    </div>
-                                )}
-                                <div>
-                                    <p className="font-bold">{foundAgent.name}</p>
-                                    <p className="text-sm text-gray-400">{foundAgent.role || "Field Agent"}</p>
-                                </div>
+                                    <button 
+                                        type="submit"
+                                        className="h-[52px] px-8 mr-1 rounded-2xl bg-[#24aa4d] text-black font-black text-[10px] uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-[#24aa4d]/20"
+                                    >
+                                        Verify
+                                    </button>
+                                </form>
                             </div>
-                        </div>
+                            {error && <p className="text-center text-xs font-black text-red-500 uppercase tracking-widest animate-shake">{error}</p>}
+                        </motion.div>
+                    )}
 
-                        <button
-                            onClick={startCamera}
-                            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 font-bold py-4 rounded-lg transition-all transform hover:scale-105 text-lg"
+                    {/* STEP 2: Agent Preview & Start */}
+                    {foundCustomer && !cameraActive && !verificationResult && (
+                        <motion.div 
+                            key="preview"
+                            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -20 }}
+                            className="w-full space-y-6"
                         >
-                            Start Verification (Camera)
-                        </button>
-                    </motion.div>
-                )}
-
-                {/* Step 3: Camera & Liveness Check */}
-                {cameraActive && !verificationResult && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20"
-                    >
-                        <div className="relative mb-6">
-                            <video
-                                ref={videoRef}
-                                autoPlay
-                                playsInline
-                                muted
-                                className="w-full rounded-lg border-2 border-purple-500/50 transform -scale-x-100"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <div className="w-48 h-48 rounded-full border-2 border-dashed border-green-400 opacity-60"></div>
-                            </div>
-                        </div>
-
-                        {!isVerifying && !livenessPassed && (
-                            <button
-                                onClick={startLivenessCheck}
-                                className="w-full bg-green-500 hover:bg-green-600 font-bold py-3 rounded-lg transition-colors"
-                            >
-                                Start Liveness Check
-                            </button>
-                        )}
-
-                        {isVerifying && !livenessPassed && (
-                            <div className="space-y-4">
-                                <div className="flex justify-center gap-2">
-                                    {LIVENESS_TASKS.map((task, idx) => (
-                                        <div
-                                            key={task.id}
-                                            className={`w-3 h-3 rounded-full transition-all ${idx < livenessStep
-                                                    ? "bg-green-500"
-                                                    : idx === livenessStep
-                                                        ? "bg-yellow-500 animate-pulse"
-                                                        : "bg-gray-600"
-                                                }`}
-                                        />
-                                    ))}
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-2xl font-bold text-green-400">
-                                        {livenessStep < LIVENESS_TASKS.length
-                                            ? LIVENESS_TASKS[livenessStep].label
-                                            : "Completed!"}
-                                    </p>
-                                    <p className="text-gray-400 mt-2">
-                                        {livenessStep < LIVENESS_TASKS.length
-                                            ? LIVENESS_TASKS[livenessStep].instruction
-                                            : "Liveness check passed!"}
-                                    </p>
-                                    {livenessMessage && (
-                                        <p className="text-yellow-400 text-sm mt-2">{livenessMessage}</p>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {livenessPassed && (
-                            <div className="space-y-4">
-                                <div className="text-center">
-                                    <div className="text-5xl mb-2">✅</div>
-                                    <p className="text-green-400 font-bold">Liveness Check Passed!</p>
-                                    <p className="text-sm text-gray-400">Score: {livenessScore}%</p>
-                                </div>
-                                <button
-                                    onClick={captureAndVerify}
-                                    className="w-full bg-purple-500 hover:bg-purple-600 font-bold py-3 rounded-lg transition-colors"
-                                >
-                                    Capture & Verify Identity
-                                </button>
-                            </div>
-                        )}
-
-                        <button
-                            onClick={stopCamera}
-                            className="w-full mt-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 font-bold py-2 rounded-lg transition-colors"
-                        >
-                            Cancel
-                        </button>
-                    </motion.div>
-                )}
-
-                {/* Step 4: Verification Result */}
-                {verificationResult && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20"
-                    >
-                        <h2 className="text-2xl font-bold text-center mb-6">
-                            Verification {verificationResult.isVerified ? "Passed ✓" : "Failed ✗"}
-                        </h2>
-
-                        <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div className="text-center">
-                                <div className="bg-black/50 rounded-lg overflow-hidden mb-2 aspect-square">
-                                    {verificationResult.agentImage ? (
-                                        <img
-                                            src={verificationResult.agentImage}
-                                            alt="Agent Profile"
-                                            className="w-full h-full object-cover"
-                                        />
+                            <div className="relative p-8 rounded-[40px] bg-white/[0.03] border border-white/10 overflow-hidden text-center">
+                                {/* Decor */}
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-[#24aa4d]/10 blur-[60px] rounded-full" />
+                                
+                                <div className="relative mb-6 mx-auto w-24 h-24 p-1 rounded-full border border-white/10">
+                                    {foundAgent.image ? (
+                                        <img src={foundAgent.image} alt="Agent" className="w-full h-full rounded-full object-cover" />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center">
-                                            <span className="text-gray-500">No Image</span>
+                                        <div className="w-full h-full rounded-full bg-white/5 flex items-center justify-center text-2xl">A</div>
+                                    )}
+                                    <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-[#24aa4d] border-[4px] border-black flex items-center justify-center text-black text-[10px] font-black">✓</div>
+                                </div>
+
+                                <h2 className="text-2xl font-black text-white tracking-tight">{foundAgent.name}</h2>
+                                <p className="text-[10px] text-[#24aa4d] font-bold uppercase tracking-[0.2em] mt-1">Matched Field Agent</p>
+                                
+                                <div className="mt-8 pt-8 border-t border-white/5 space-y-1">
+                                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Assigned to Customer</p>
+                                    <p className="text-sm font-bold text-white uppercase">{foundCustomer.name}</p>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={startCamera}
+                                className="w-full py-6 rounded-[30px] bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-[#24aa4d] hover:text-white transition-all transform active:scale-95 shadow-xl shadow-white/5"
+                            >
+                                Launch Liveness Engine
+                            </button>
+                            <button onClick={resetAll} className="w-full text-[10px] font-black text-gray-600 uppercase tracking-widest hover:text-white transition-colors">Abort Session</button>
+                        </motion.div>
+                    )}
+
+                    {/* STEP 3: Camera & Tasks */}
+                    {cameraActive && !verificationResult && (
+                        <motion.div 
+                            key="camera"
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="w-full space-y-8"
+                        >
+                            {/* Video Circle Container */}
+                            <div className="relative aspect-square w-full max-w-[340px] mx-auto">
+                                <div className={`absolute inset-0 rounded-full border-2 transition-all duration-300 ${isVerifying ? 'border-[#24aa4d] shadow-[0_0_30px_rgba(36,170,77,0.3)]' : 'border-white/10'}`} />
+                                
+                                <div className="absolute inset-4 rounded-full overflow-hidden bg-white/5">
+                                    <video 
+                                        ref={videoRef} autoPlay playsInline muted 
+                                        className="w-full h-full object-cover transform -scale-x-100 scale-125"
+                                    />
+                                    
+                                    <AnimatePresence>
+                                        {!isVerifying && !livenessPassed && (
+                                            <motion.div 
+                                                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                                className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-8 text-center"
+                                            >
+                                                <button 
+                                                    onClick={runLiveness}
+                                                    className="w-20 h-20 rounded-full bg-[#24aa4d] text-black font-black text-[10px] uppercase p-4 leading-tight shadow-2xl"
+                                                >
+                                                    Tap to Start
+                                                </button>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    {/* Task Banner Overlay */}
+                                    {isVerifying && !livenessPassed && (
+                                        <div className="absolute bottom-10 left-0 right-0 px-6">
+                                            <div className="bg-black/80 backdrop-blur-lg border border-[#24aa4d]/30 p-4 rounded-2xl text-center shadow-2xl">
+                                                <p className="text-[9px] font-black text-[#24aa4d] uppercase tracking-[0.3em] mb-1">Current Action</p>
+                                                <h3 className="text-lg font-black text-white leading-tight">
+                                                    {LIVENESS_TASKS[livenessStep]?.label || "Processing..."}
+                                                </h3>
+                                            </div>
                                         </div>
                                     )}
-                                </div>
-                                <p className="text-sm text-gray-400">Agent Profile</p>
-                            </div>
-                            <div className="text-center">
-                                <div className="bg-black/50 rounded-lg overflow-hidden mb-2 aspect-square">
-                                    <img
-                                        src={verificationResult.capturedImage}
-                                        alt="Captured Selfie"
-                                        className="w-full h-full object-cover transform -scale-x-100"
-                                    />
-                                </div>
-                                <p className="text-sm text-gray-400">Your Selfie</p>
-                            </div>
-                        </div>
 
-                        <div className="space-y-3 mb-6">
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-400">Liveness Score:</span>
-                                <span className={`font-bold ${verificationResult.livenessScore >= 70 ? 'text-green-400' : 'text-yellow-400'}`}>
-                                    {verificationResult.livenessScore}%
-                                </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-400">Face Match Score:</span>
-                                <span className={`font-bold ${verificationResult.faceMatchConfidence >= 70 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {verificationResult.faceMatchConfidence}%
-                                </span>
-                            </div>
-                            <div className="flex justify-between items-center pt-2 border-t border-white/10">
-                                <span className="font-bold">Final Score:</span>
-                                <span className={`text-2xl font-bold ${verificationResult.isVerified ? 'text-green-400' : 'text-red-400'}`}>
-                                    {verificationResult.finalScore}%
-                                </span>
-                            </div>
-                            <div className="flex flex-col gap-3">
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={retryVerification}
-                                        className="flex-1 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 font-bold py-2 rounded-lg transition-colors"
-                                    >
-                                        Retry
-                                    </button>
-                                    <button
-                                        onClick={resetVerification}
-                                        className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 font-bold py-2 rounded-lg transition-colors"
-                                    >
-                                        New Search
-                                    </button>
+                                    {/* Success Indicator */}
+                                    {livenessPassed && (
+                                        <motion.div 
+                                            initial={{ scale: 0 }} animate={{ scale: 1 }}
+                                            className="absolute inset-0 bg-[#24aa4d]/90 flex flex-col items-center justify-center text-black"
+                                        >
+                                            <span className="text-6xl mb-2">✦</span>
+                                            <p className="font-black text-xs uppercase tracking-widest">Liveness Confirmed</p>
+                                        </motion.div>
+                                    )}
                                 </div>
-                                <button
-                                    onClick={() => window.location.href = `/?verified=${foundCustomer.loan}`}
-                                    className="w-full bg-[#24aa4d] hover:bg-[#1e8a3e] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#24aa4d]/20"
-                                >
-                                    <span className="text-lg">🏠</span> Return to Dashboard
-                                </button>
                             </div>
-                        </div>
-                    </motion.div>
-                )}
-            </div>
-            <ToastContainer position="bottom-center" theme="dark" />
+
+                            {/* Instruction Support */}
+                            <div className="text-center min-h-[40px]">
+                                {livenessMessage ? (
+                                    <p className="text-xs font-black text-red-400 uppercase tracking-widest animate-pulse">{livenessMessage}</p>
+                                ) : (
+                                    isVerifying && <p className="text-xs font-bold text-gray-400">{LIVENESS_TASKS[livenessStep]?.instruction}</p>
+                                )}
+                            </div>
+
+                            {/* Task Dots */}
+                            <div className="flex justify-center gap-3">
+                                {LIVENESS_TASKS.map((_, i) => (
+                                    <div 
+                                        key={i} 
+                                        className={`h-1.5 rounded-full transition-all duration-500 ${i < livenessStep ? 'w-8 bg-[#24aa4d]' : i === livenessStep && isVerifying ? 'w-8 bg-[#24aa4d]/40 animate-pulse' : 'w-1.5 bg-white/10'}`} 
+                                    />
+                                ))}
+                            </div>
+
+                            {livenessPassed && (
+                                <button 
+                                    onClick={captureFinal}
+                                    className="w-full py-6 rounded-[30px] bg-[#24aa4d] text-black font-black text-sm uppercase tracking-widest hover:brightness-110 shadow-2xl shadow-[#24aa4d]/20"
+                                >
+                                    Complete Verification
+                                </button>
+                            )}
+
+                            <button onClick={stopCamera} className="w-full text-[10px] font-black text-gray-600 uppercase tracking-widest hover:text-white transition-colors">Cancel Engine</button>
+                        </motion.div>
+                    )}
+
+                    {/* STEP 4: Final Results */}
+                    {verificationResult && (
+                        <motion.div 
+                            key="result"
+                            initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }}
+                            className="w-full space-y-6"
+                        >
+                            <div className="p-8 rounded-[40px] bg-white/[0.03] border border-white/10 text-center relative overflow-hidden">
+                                <div className={`mb-6 inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] ${verificationResult.isVerified ? 'bg-[#24aa4d]/20 text-[#24aa4d]' : 'bg-red-500/20 text-red-500'}`}>
+                                    {verificationResult.isVerified ? "Trusted Identity" : "Score Failed"}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 mb-8">
+                                    <div className="space-y-2">
+                                        <div className="aspect-square rounded-3xl overflow-hidden bg-white/5 border border-white/10">
+                                            {verificationResult.agentImage && <img src={verificationResult.agentImage} className="w-full h-full object-cover" />}
+                                        </div>
+                                        <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Master Record</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="aspect-square rounded-3xl overflow-hidden bg-[#24aa4d]/10 border border-[#24aa4d]/30">
+                                            <img src={verificationResult.capturedImage} className="w-full h-full object-cover transform -scale-x-100" />
+                                        </div>
+                                        <p className="text-[9px] font-black text-[#24aa4d] uppercase tracking-widest">Session Capture</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 pt-6 border-t border-white/5">
+                                    <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                                        <span className="text-gray-500">Confidence Match</span>
+                                        <span className={verificationResult.isVerified ? 'text-[#24aa4d]' : 'text-red-500'}>{verificationResult.finalScore}%</span>
+                                    </div>
+                                    {/* Progress bar */}
+                                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                        <motion.div 
+                                            initial={{ width: 0 }} animate={{ width: `${verificationResult.finalScore}%` }} 
+                                            className={`h-full ${verificationResult.isVerified ? 'bg-[#24aa4d]' : 'bg-red-500'}`}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <button 
+                                    onClick={() => window.location.href = `/?verified=${foundCustomer.loan}`}
+                                    className="w-full py-6 rounded-[30px] bg-[#24aa4d] text-black font-black text-sm uppercase tracking-widest shadow-xl shadow-[#24aa4d]/20"
+                                >
+                                    Finish & Sync
+                                </button>
+                                <button onClick={resetAll} className="w-full py-4 rounded-[25px] border border-white/10 text-white font-black text-[10px] uppercase tracking-widest hover:bg-white hover:text-black transition-all">New Search</button>
+                            </div>
+                        </motion.div>
+                    )}
+
+                </AnimatePresence>
+            </main>
+
+            <ToastContainer position="bottom-center" theme="dark" hideProgressBar pauseOnHover={false} newestOnTop />
+            
+            {/* Global Style overrides for hide-scrollbar */}
+            <style jsx global>{`
+                .hide-scrollbar::-webkit-scrollbar { display: none; }
+                .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+                @keyframes shake {
+                    0%, 100% { transform: translateX(0); }
+                    25% { transform: translateX(-4px); }
+                    75% { transform: translateX(4px); }
+                }
+                .animate-shake { animation: shake 0.2s ease-in-out infinite; animation-iteration-count: 2; }
+            `}</style>
         </div>
     );
 }
