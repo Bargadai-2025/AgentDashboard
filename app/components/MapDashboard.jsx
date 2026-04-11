@@ -416,21 +416,15 @@ export default function MapDashboard({ allAgents }) {
               className="flex-1 flex flex-col overflow-hidden">
 
               {/* ── PINNED HEADER ────────────────────────────────────────── */}
+          {/* ── VIEW 3: Customer Selected ────────────────────────────────── */}
+          {view === VIEW.CUSTOMER && selectedCustomer && selectedAgent && (
+            <motion.div key="customer" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
+              className="flex-1 flex flex-col overflow-hidden">
+
+              {/* ── PINNED HEADER ────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-gradient-to-r from-[#24aa4d]/10 to-transparent border-b border-white/5">
                 <button
-                  onClick={() => {
-                    setSelectedCustomer(null);
-                    setView(VIEW.AGENT);
-                    // Restore full agent points
-                    const custs = (selectedAgent.customers || [])
-                      .filter((c) => c.location?.lat && c.location?.lng)
-                      .map((c) => ({ lat: c.location.lat, lng: c.location.lng, data: c }));
-                    setMapPoints([
-                      { lat: selectedAgent.location.lat, lng: selectedAgent.location.lng, data: selectedAgent, isAgent: true },
-                      { lat: OFFICE.lat, lng: OFFICE.lng, name: OFFICE.name, isOffice: true },
-                      ...custs
-                    ]);
-                  }}
+                  onClick={() => handleAgentSelect(selectedAgent)}
                   className="w-full flex items-center gap-2 px-4 pt-4 pb-2 text-[10px] font-black text-[#24aa4d] uppercase tracking-widest hover:opacity-70 transition-opacity"
                 >
                   ← Back to {selectedAgent.name}
@@ -459,7 +453,6 @@ export default function MapDashboard({ allAgents }) {
                   </p>
                   <h2 className="text-2xl font-black text-white">{selectedCustomer.name}</h2>
                   <p className="text-xs text-[#24aa4d] font-bold mt-2 leading-relaxed">
-                    {/* 📍  */}
                     {selectedCustomer.address || "Fetching address..."}
                   </p>
                   {customerDistances[selectedCustomer._id] && (
@@ -476,17 +469,53 @@ export default function MapDashboard({ allAgents }) {
 
                 {/* Verification status */}
                 <div className={`p-4 rounded-2xl border ${selectedCustomer.verifiedAgentImage ? "bg-[#24aa4d]/10 border-[#24aa4d]/30" : "bg-red-500/5 border-red-500/20"}`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className={`w-2 h-2 rounded-full ${selectedCustomer.verifiedAgentImage ? "bg-[#24aa4d] shadow-[0_0_8px_#24aa4d]" : "bg-red-500 animate-pulse"}`} />
-                    <span className={`text-[11px] font-black uppercase tracking-widest ${selectedCustomer.verifiedAgentImage ? "text-[#24aa4d]" : "text-red-400"}`}>
-                      {selectedCustomer.verifiedAgentImage ? "Identity Verified" : "Verification Required"}
-                    </span>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${selectedCustomer.verifiedAgentImage ? "bg-[#24aa4d] shadow-[0_0_8px_#24aa4d]" : "bg-red-500 animate-pulse"}`} />
+                      <span className={`text-[11px] font-black uppercase tracking-widest ${selectedCustomer.verifiedAgentImage ? "text-[#24aa4d]" : "text-red-400"}`}>
+                        {selectedCustomer.verifiedAgentImage ? "Identity Verified" : "Verification Required"}
+                      </span>
+                    </div>
+                    {/* Delete Icon for verified customers */}
+                    {selectedCustomer.verifiedAgentImage && (
+                      <button
+                        title="Delete Verification & Re-verify"
+                        onClick={async () => {
+                          if (!confirm("Are you sure you want to delete this verification and retake it?")) return;
+                          try {
+                            const res = await fetch("/api/customer/reset-verification", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ customerId: selectedCustomer._id }),
+                            });
+                            if (res.ok) {
+                              // Update local state
+                              const updated = { ...selectedCustomer, verifiedAgentImage: null };
+                              setSelectedCustomer(updated);
+                              // Also update it in the selectedAgent's customer list so the sidebar updates
+                              const updatedCustomers = selectedAgent.customers.map(c => 
+                                c._id === updated._id ? updated : c
+                              );
+                              setSelectedAgent({ ...selectedAgent, customers: updatedCustomers });
+                            }
+                          } catch (err) {
+                            console.error("Reset failed:", err);
+                          }
+                        }}
+                        className="w-7 h-7 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-lg"
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="3" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                      </button>
+                    )}
                   </div>
 
                   {selectedCustomer.verifiedAgentImage ? (
                     <div className="flex items-center gap-4">
-                      <img src={selectedCustomer.verifiedAgentImage} alt="Captured"
-                        className="w-20 h-20 rounded-xl object-cover border border-[#24aa4d]/40" />
+                      <div className="relative group">
+                        <img src={selectedCustomer.verifiedAgentImage} alt="Captured"
+                          className="w-20 h-20 rounded-xl object-cover border border-[#24aa4d]/40" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity flex items-center justify-center text-xs text-white pointer-events-none">Verified</div>
+                      </div>
                       <div>
                         <p className="text-xs font-bold text-white">Biometric Captured</p>
                         <p className="text-[10px] text-gray-500 mt-0.5">Agent photo on record</p>
@@ -496,7 +525,7 @@ export default function MapDashboard({ allAgents }) {
                     <motion.button
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                       onClick={() => router.push(`/verify?loan=${selectedCustomer.loan || selectedCustomer._id}&customerId=${selectedCustomer._id}`)}
-                      className="w-full flex items-center justify-between p-3 rounded-xl bg-[#ff0000] text-white font-bold text-xs"
+                      className="w-full flex items-center justify-between p-3 rounded-xl bg-red-600 text-white font-bold text-xs shadow-[0_4px_12px_rgba(220,38,38,0.4)]"
                     >
                       START LIVENESS CAPTURE <span className="text-lg">→</span>
                     </motion.button>
