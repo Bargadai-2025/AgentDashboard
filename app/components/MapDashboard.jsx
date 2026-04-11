@@ -29,9 +29,6 @@ export default function MapDashboard({ allAgents }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  if (!mounted) return null;
-
-
   // ── UI State ──────────────────────────────────────────────────────────────
   const [view, setView] = useState(VIEW.OVERVIEW);
   const [selectedAgent, setSelectedAgent] = useState(null);
@@ -44,7 +41,9 @@ export default function MapDashboard({ allAgents }) {
   const [tripSummary, setTripSummary] = useState(null);
   const [customerDistances, setCustomerDistances] = useState({});
 
+
   // ── Compute straight-line distances from OFFICE ──────────────────────────
+
   const computeDistances = useCallback((agent) => {
     if (!agent?.customers?.length) return {};
     return Object.fromEntries(
@@ -142,7 +141,10 @@ export default function MapDashboard({ allAgents }) {
   const totalKm = tripSummary?.legs ? (tripSummary.legs.reduce((s, l) => s + l.distance, 0)).toFixed(1) : null;
   const totalMin = tripSummary?.legs ? Math.ceil(tripSummary.legs.reduce((s, l) => s + l.duration, 0) / 60) : null;
 
+  if (!mounted) return null;
+
   // ── Map marker click dispatcher ───────────────────────────────────────────
+
   const handleMarkerClick = (pointData) => {
     if (view === VIEW.OVERVIEW && pointData.isAgent) handleAgentSelect(pointData.data);
     if (view === VIEW.AGENT && !pointData.isAgent && !pointData.isOffice) {
@@ -290,9 +292,9 @@ export default function MapDashboard({ allAgents }) {
                         <motion.div
                           key={cust._id}
                           initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}
-                          onClick={() => { 
-                            setSelectedCustomer(cust); 
-                            setView(VIEW.CUSTOMER); 
+                          onClick={() => {
+                            setSelectedCustomer(cust);
+                            setView(VIEW.CUSTOMER);
                             // Update map points to focus on this customer + agent
                             setMapPoints([
                               { lat: selectedAgent.location.lat, lng: selectedAgent.location.lng, data: selectedAgent, isAgent: true },
@@ -377,9 +379,9 @@ export default function MapDashboard({ allAgents }) {
               {/* ── PINNED HEADER ────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-gradient-to-r from-[#24aa4d]/10 to-transparent border-b border-white/5">
                 <button
-                  onClick={() => { 
-                    setSelectedCustomer(null); 
-                    setView(VIEW.AGENT); 
+                  onClick={() => {
+                    setSelectedCustomer(null);
+                    setView(VIEW.AGENT);
                     // Restore full agent points
                     const custs = (selectedAgent.customers || [])
                       .filter((c) => c.location?.lat && c.location?.lng)
