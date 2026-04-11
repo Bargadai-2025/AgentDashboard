@@ -522,7 +522,8 @@
 // app/verify/page.tsx (Integrated Version)
 "use client";
 export const dynamic = "force-dynamic";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
+
 import { motion, AnimatePresence } from "framer-motion";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -600,7 +601,8 @@ const LIVENESS_TASKS = [
   }
 ];
 
-export default function AgentVerificationPage() {
+function AgentVerificationContent() {
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -1196,5 +1198,17 @@ export default function AgentVerificationPage() {
 
       <ToastContainer position="bottom-center" theme="dark" />
     </div>
+  );
+}
+
+export default function AgentVerificationPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#24aa4d]"></div>
+      </div>
+    }>
+      <AgentVerificationContent />
+    </Suspense>
   );
 }

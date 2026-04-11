@@ -9,6 +9,8 @@
 
 "use client";
 
+import { Suspense } from "react";
+
 import dynamic from "next/dynamic";
 
 const MapDashboard = dynamic(
@@ -31,7 +33,13 @@ const MapDashboard = dynamic(
 export default function HomeClient({ allAgents }) {
   return (
     <div className="w-full h-full bg-black font-sans">
-      <MapDashboard allAgents={allAgents} />
+      <Suspense fallback={
+        <div className="h-full w-full flex items-center justify-center bg-black">
+          <div className="w-8 h-8 border-2 border-[#24aa4d] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }>
+        <MapDashboard allAgents={allAgents} />
+      </Suspense>
     </div>
   );
 }
