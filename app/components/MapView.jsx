@@ -162,20 +162,26 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
   // ── EFFECT B: Polyline/Route Rendering ────────────────────────────────────
   // Uses native GL Layers for maximum reliability and performance.
   useEffect(() => {
-    if (!mapInstance.current || !isLoaded || !routePath) return;
-
+    if (!mapInstance.current || !isLoaded) return;
     const map = mapInstance.current;
 
-    // Helper to add layers once the style is ready
-    const addRouteLayers = () => {
-      // 1. Cleanup old layers/sources
+    // 1. ALWAYS Cleanup old layers/sources first (even if routePath is null)
+    const cleanupLayers = () => {
       try {
         if (map.getLayer("route-casing")) map.removeLayer("route-casing");
         if (map.getLayer("route-line")) map.removeLayer("route-line");
         if (map.getSource("route-source")) map.removeSource("route-source");
       } catch (e) { }
+    };
 
-      if (routePath.length === 0) return;
+    if (!routePath || routePath.length === 0) {
+      cleanupLayers();
+      return;
+    }
+
+    // 2. Add layers once the style is ready
+    const addRouteLayers = () => {
+      cleanupLayers();
 
       try {
         console.log(`[MapView] Rendering road path: ${routePath.length} nodes.`);
@@ -194,11 +200,7 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
           id: "route-casing",
           type: "line",
           source: "route-source",
-          paint: {
-            "line-color": "#ffffff",
-            "line-width": 10,
-            "line-opacity": 0.2
-          },
+          paint: { "line-color": "#ffffff", "line-width": 10, "line-opacity": 0.2 },
           layout: { "line-join": "round", "line-cap": "round" }
         });
 
@@ -207,27 +209,21 @@ export default function MapView({ points, routePath, result, onMarkerClick }) {
           id: "route-line",
           type: "line",
           source: "route-source",
-          paint: {
-            "line-color": "#24aa4d",
-            "line-width": 6,
-            "line-opacity": 1
-          },
+          paint: { "line-color": "#24aa4d", "line-width": 6, "line-opacity": 1 },
           layout: { "line-join": "round", "line-cap": "round" }
         });
-
-        console.log("[MapView] Road path layers added successfully.");
       } catch (e) {
         console.error("[MapView] Native layer error:", e);
       }
     };
 
-    // If style isn't ready, wait for it
     if (!map.isStyleLoaded()) {
       map.once("style.load", addRouteLayers);
     } else {
       addRouteLayers();
     }
   }, [routePath, isLoaded]);
+
 
 
   return (
