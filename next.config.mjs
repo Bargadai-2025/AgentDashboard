@@ -7,6 +7,7 @@ const nextConfig = {
       {
         source: '/api/:path*',
         destination: 'https://agent-backend-dashboard-production.up.railway.app/api/:path*',
+        // destination: 'http://localhost:8000/api/:path*',
       },
     ];
   },

@@ -15,9 +15,10 @@ async function fetchAgentsWithCustomers() {
   try {
     // Priority: 1. Localhost if in dev, 2. Env BASE_URL, 3. localhost fallback
     const isDev = process.env.NODE_ENV === "development";
+    // Hit Railway directly in production for server-side fetches to avoid Vercel rewrite proxy timeouts
     const baseUrl = isDev
       ? "http://localhost:3000"
-      : (process.env.BASE_URL || "http://localhost:3000");
+      : "https://agent-backend-dashboard-production.up.railway.app";
 
     const res = await fetch(
       `${baseUrl}/api/agents/with-customers`,
