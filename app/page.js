@@ -15,8 +15,8 @@ async function fetchAgentsWithCustomers() {
   try {
     // Priority: 1. Localhost if in dev, 2. Env BASE_URL, 3. localhost fallback
     const isDev = process.env.NODE_ENV === "development";
-    const baseUrl = isDev 
-      ? "http://localhost:3000" 
+    const baseUrl = isDev
+      ? "http://localhost:3000"
       : (process.env.BASE_URL || "http://localhost:3000");
 
     const res = await fetch(

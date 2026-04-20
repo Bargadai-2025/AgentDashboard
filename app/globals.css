@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Century Gothic';
+  src: local('Century Gothic'), local('CenturyGothic'), local('AppleGothic'), sans-serif;
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root {
+  --font-century: "Century Gothic", "CenturyGothic", "AppleGothic", sans-serif;
+}
+
+body {
+  font-family: var(--font-century);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 .agent-marker {
   background: #16a34a;
   color: white;

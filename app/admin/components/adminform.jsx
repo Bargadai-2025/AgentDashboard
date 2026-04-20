@@ -29,8 +29,8 @@ export default function AdminAssignment() {
     async function loadData() {
       try {
         const [agentRes, custRes] = await Promise.all([
-          fetch("/api/agent"),
-          fetch("/api/customer"),
+          fetch("/api/agents"),
+          fetch("/api/customers"),
         ]);
         const agentJson = await agentRes.json();
         const custJson = await custRes.json();
@@ -60,7 +60,7 @@ export default function AdminAssignment() {
     setSaving(true);
     try {
       // PATCH the agent → merges selectedIds into agent.customers[]
-      const res = await fetch(`/api/agent/${selectedAgent._id}`, {
+      const res = await fetch(`/api/agents/${selectedAgent._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customerIds: selectedIds }),
@@ -72,7 +72,7 @@ export default function AdminAssignment() {
       // Also update each customer's agentId field so the reverse link is consistent
       await Promise.all(
         selectedIds.map((custId) =>
-          fetch(`/api/customer/${custId}`, {
+          fetch(`/api/customers/${custId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ agentId: selectedAgent._id }),

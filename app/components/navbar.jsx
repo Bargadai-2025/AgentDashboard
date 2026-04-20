@@ -1,86 +1,207 @@
-"use client";
-// ─────────────────────────────────────────────────────────────────────────────
-// Navbar.jsx — Global Top Navigation Bar
-// Present on all pages via layout.js
-// ─────────────────────────────────────────────────────────────────────────────
+// "use client";
+// import { useState } from "react";
+// import Link from "next/link";
+// import { usePathname } from "next/navigation";
 
-import { useState } from "react";
+// export default function Navbar() {
+//   const [searchQuery, setSearchQuery] = useState("");
+//   const pathname = usePathname();
+
+//   const FONT_SANS = "system-ui, -apple-system, sans-serif";
+
+//   return (
+//     <nav className="w-full flex-shrink-0 h-14 bg-[#2D0060] flex items-center px-6 gap-6 z-50 relative border-b border-white/5" style={{ fontFamily: FONT_SANS }}>
+
+//       {/* Brand */}
+//       <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+//         <span className="text-white font-bold text-lg tracking-tight uppercase">Master Demo</span>
+//       </Link>
+
+//       <div className="flex-1" />
+
+//       {/* Search Bar - Simplified */}
+//       <div className="flex items-center gap-2 bg-white/10 rounded-md px-3 py-1.5 w-64 border border-white/10">
+//         <input
+//           suppressHydrationWarning
+//           type="text"
+//           placeholder="Search..."
+//           value={searchQuery}
+//           onChange={(e) => setSearchQuery(e.target.value)}
+//           className="bg-transparent text-white text-xs outline-none flex-1 placeholder:text-gray-500 font-semibold"
+//         />
+
+//       </div>
+
+//       {/* Right Icons - Simple Square Radii */}
+//       <div className="flex items-center gap-3">
+//         <button className="w-8 h-8 rounded-md bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all text-white">
+//           <span className="text-xs">🔔</span>
+//         </button>
+//         <button className="w-8 h-8 rounded-md bg-[#24aa4d] flex items-center justify-center text-white font-bold text-xs">
+//           JD
+//         </button>
+//       </div>
+//     </nav>
+//   );
+// }
+
+"use client";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Search, Bell, Clock } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
-  const pathname = usePathname();
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const navLinks = [
-    { href: "/",           label: "Map" },
-    { href: "/admin",      label: "Assignments" },
-    { href: "/superadmin", label: "Super Admin" },
-  ];
+  // Notifications fetch logic
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      try {
+        const res = await fetch("/api/notifications");
+        if (res.ok) {
+          const result = await res.json();
+          setNotifications(result.data || []);
+          setUnreadCount((result.data || []).filter(n => !n.read).length);
+        }
+      } catch (err) {
+        console.error("Failed to fetch notifications:", err);
+      }
+    };
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const markNotifRead = async (id) => {
+    try {
+      await fetch(`/api/notifications/read/${id}`, { method: "POST" });
+      setNotifications(prev => prev.map(n => n._id === id ? { ...n, read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const FONT_SANS = "system-ui, -apple-system, sans-serif";
+
 
   return (
-    <nav className="w-full flex-shrink-0 h-14 bg-[#0a0a0a] border-b border-white/5 flex items-center px-6 gap-6 z-50 relative">
-
-      {/* Brand */}
-      <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
-        <div className="w-7 h-7 rounded-lg bg-[#24aa4d] flex items-center justify-center">
-          <span className="text-black font-black text-xs">B</span>
-        </div>
-        <div className="leading-tight">
-          <span className="text-white font-black text-sm tracking-tight">BARGAD</span>
-          <span className="text-[#24aa4d] font-black text-sm tracking-tight"> AGENT </span>
-          <span className="text-gray-400 font-bold text-xs tracking-widest uppercase">Tracker</span>
-        </div>
+    <nav
+      className="w-full flex-shrink-0 h-14 bg-[#2D0060] flex items-center px-6 z-50 relative"
+      style={{ fontFamily: FONT_SANS }}
+    >
+      {/* Brand Section */}
+      <Link href="/" className="flex flex-col leading-none flex-shrink-0">
+        <span className="text-[10px] text-gray-300 uppercase tracking-widest font-medium">
+          Master
+        </span>
+        <span className="text-white font-black text-xl uppercase tracking-tighter">
+          Demo
+        </span>
       </Link>
 
-      {/* Nav Links */}
-      <div className="hidden md:flex items-center gap-1 ml-2">
-        {navLinks.map(({ href, label }) => (
-          <Link
-            key={href}
-            href={href}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              pathname === href
-                ? "bg-[#24aa4d]/10 text-[#24aa4d]"
-                : "text-gray-500 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            {label}
-          </Link>
-        ))}
-      </div>
-
+      {/* Spacer to push content to the right */}
       <div className="flex-1" />
 
-      {/* Search Bar */}
-      <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 w-56">
-        <svg className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
-        </svg>
-        <input
-          suppressHydrationWarning
-          type="text"
-          placeholder="Search agents, customers..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="bg-transparent text-white text-xs outline-none flex-1 placeholder:text-gray-600"
-        />
+      {/* Right Side Items */}
+      <div className="flex items-center gap-4">
+        {/* Search Bar - Pill Shaped */}
+        <div className="relative flex items-center">
+          <input
+            type="text"
+            placeholder="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-white rounded-full py-2 pl-4 pr-10 w-64 text-sm text-gray-800 outline-none placeholder:text-gray-400"
+          />
+          <div className="absolute right-1 bg-[#6200EE] p-1.5 rounded-full cursor-pointer hover:bg-[#5200D0] transition-colors">
+            <Search size={16} className="text-white" />
+          </div>
+        </div>
+
+        {/* Action Icons */}
+        <div className="flex items-center gap-2 relative">
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className={`p-2 hover:text-white transition-colors relative ${showNotifications ? 'text-white' : 'text-gray-300'}`}
+          >
+            <Bell size={22} strokeWidth={1.5} />
+            {unreadCount > 0 && (
+              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-[#2D004D]"></span>
+            )}
+          </button>
+
+          <AnimatePresence>
+            {showNotifications && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="absolute top-12 right-0 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col z-[100]"
+                style={{ maxHeight: '450px' }}
+              >
+                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-900">Notifications</h4>
+                  <span className="text-[10px] font-bold text-[#6200EE] bg-[#6200EE]/10 px-2 py-0.5 rounded-full">{unreadCount} New</span>
+                </div>
+                <div className="overflow-y-auto flex-1">
+                  {notifications.length === 0 ? (
+                    <div className="p-10 text-center">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No notifications</p>
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n._id}
+                        onClick={() => markNotifRead(n._id)}
+                        className={`p-4 border-b border-gray-50 cursor-pointer transition-colors ${!n.read ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${n.type === 'deviation' ? 'bg-red-100 text-red-600' :
+                              n.type === 'arrival' ? 'bg-emerald-100 text-emerald-600' :
+                                n.type === 'journey_started' ? 'bg-purple-100 text-purple-600' :
+                                  'bg-blue-100 text-blue-600'
+                            }`}>
+                            {n.type?.replace('_', ' ')}
+                          </span>
+                          <span className="text-[9px] text-gray-400 font-bold">
+                            {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-bold text-gray-800 leading-snug">{n.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {notifications.length > 0 && (
+                  <div className="p-3 border-t border-gray-100 text-center bg-gray-50/30">
+                    <button className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-gray-900 transition-colors">View All Activities</button>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+
+          <button className="p-2 text-gray-300 hover:text-white">
+            <Clock size={22} strokeWidth={1.5} />
+          </button>
+
+          {/* User Profile Avatar */}
+          {/* <button className="ml-2 w-9 h-9 rounded-full overflow-hidden border border-white/20">
+            <img
+              src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+              alt="User"
+              className="w-full h-full object-cover"
+            />
+          </button> */}
+        </div>
       </div>
-
-      {/* Notification Bell */}
-      <button className="relative w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all group">
-        <svg className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-        </svg>
-        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#24aa4d]" />
-      </button>
-
-      {/* User Avatar */}
-      <button className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#24aa4d]/30 to-purple-600/30 border border-white/10 flex items-center justify-center hover:border-[#24aa4d]/50 transition-all">
-        <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      </button>
     </nav>
   );
 }

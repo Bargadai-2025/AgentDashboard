@@ -1,0 +1,260 @@
+import { NextResponse } from "next/server";
+import { createHash } from "crypto";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/route
+//
+// Accepts a list of { lat, lng } waypoints and returns an optimized driving
+// route using the Mappls Route Advance API.
+//
+// OPTIMIZATION: Uses ACTUAL ROAD DISTANCES from Mappls API (not haversine)
+// For ≤8 stops, tests all permutations and returns the shortest driving path.
+//
+// SENIOR-LEVEL PATTERNS USED:
+//   1. Static cache (5-min TTL) — identical payloads skip the API entirely.
+//   2. Request coalescing — simultaneous identical requests share ONE API call.
+//   3. Payload hashing — requests compared by coordinates, not object identity.
+//   4. TSP with actual API distances — guarantees optimal route for small sets.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// In-memory stores (module-level singleton per server instance)
+const sharedRequests = new Map(); // hash → Promise (in-flight deduplication)
+const responseCache = new Map();  // hash → { data, timestamp }
+
+const CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutes
+let globalHitCount = 0;             // for server-side monitoring logs
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * SHA-256 hash of the waypoint coordinates (6 decimal places).
+ * Used as the dedup/cache key.
+ */
+function generatePayloadHash(points) {
+  const simplified = points
+    .map((p) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`)
+    .join("|");
+  return createHash("sha256").update(simplified).digest("hex");
+}
+
+/**
+ * Generate all permutations of an array.
+ */
+function permute(arr) {
+  if (arr.length <= 1) return [arr];
+  const result = [];
+  for (let i = 0; i < arr.length; i++) {
+    const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+    for (const perm of permute(rest)) {
+      result.push([arr[i], ...perm]);
+    }
+  }
+  return result;
+}
+
+/**
+ * Fetch actual route distance from Mappls API for a given permutation.
+ * Returns the total distance in km or null if API fails.
+ */
+async function getActualRouteDistance(orderedPoints, apiKey) {
+  try {
+    const coords = orderedPoints
+      .map((p) => `${p.lng},${p.lat}`)
+      .join(";");
+    
+    const url =
+      `https://apis.mappls.com/advancedmaps/v1/${apiKey}/route_adv/driving/${coords}` +
+      `?geometries=geojson&overview=full`;
+    
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    
+    const data = await res.json();
+    if (!data.routes?.[0]?.distance) return null;
+    
+    return data.routes[0].distance / 1000; // Convert metres to km
+  } catch (err) {
+    console.warn("[ROUTE] Distance calculation failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Find optimal route using ACTUAL ROAD DISTANCES.
+ * For ≤8 stops, tests all permutations and returns the shortest.
+ */
+async function optimizeRouteByActualDistance(points, apiKey) {
+  // Keep first (start) and last (end) points fixed
+  if (points.length <= 3) {
+    return points.map((_, i) => i);
+  }
+
+  const startIdx = 0;
+  const endIdx = points.length - 1;
+  const flexibleIndices = Array.from(
+    { length: points.length - 2 },
+    (_, i) => i + 1
+  );
+
+  // For large sets, fall back to best guess
+  if (points.length > 8) {
+    console.log("[ROUTE] More than 8 stops - using single route (not optimized)");
+    return points.map((_, i) => i);
+  }
+
+  let bestRoute = [startIdx, ...flexibleIndices, endIdx];
+  let minDistance = Infinity;
+
+  console.log(`[ROUTE] Testing ${permute(flexibleIndices).length} permutations...`);
+
+  for (const perm of permute(flexibleIndices)) {
+    const currentRoute = [startIdx, ...perm, endIdx];
+    const orderedPoints = currentRoute.map((idx) => points[idx]);
+    
+    const distance = await getActualRouteDistance(orderedPoints, apiKey);
+    
+    if (distance !== null && distance < minDistance) {
+      minDistance = distance;
+      bestRoute = currentRoute;
+      console.log(`[ROUTE] Better route found: ${bestRoute.join("→")} = ${distance.toFixed(2)} km`);
+    }
+  }
+
+  return bestRoute;
+}
+
+// ── Route Handler ─────────────────────────────────────────────────────────────
+
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const { points, requestId: clientRequestId } = body;
+
+    // ── Input Validation ────────────────────────────────────────────────────
+    if (!points || !Array.isArray(points) || points.length < 2) {
+      return NextResponse.json(
+        { error: "At least 2 points are required." },
+        { status: 400 }
+      );
+    }
+
+    const payloadHash = generatePayloadHash(points);
+    const logId = clientRequestId || `HASH-${payloadHash.substring(0, 8)}`;
+
+    // ── 1. Static Cache Check ───────────────────────────────────────────────
+    const cached = responseCache.get(payloadHash);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      console.log(`[ROUTE] [${logId}] ⚡ Cache hit.`);
+      return NextResponse.json({ ...cached.data, status: "CACHED" });
+    }
+
+    // ── 2. Request Coalescing — Join In-Flight Request ──────────────────────
+    // If the exact same route is already being fetched, wait for that result
+    // instead of making a second Mappls API call.
+    if (sharedRequests.has(payloadHash)) {
+      console.log(`[ROUTE] [${logId}] 🤝 Joining in-flight request.`);
+      const existingData = await sharedRequests.get(payloadHash);
+      return NextResponse.json({ ...existingData, status: "COALESCED" });
+    }
+
+    // ── 3. New Atomic Request ───────────────────────────────────────────────
+    const executeRequest = (async () => {
+      const apiKey =
+        process.env.MAPPLS_API_KEY || process.env.NEXT_PUBLIC_MAPPLS_API_KEY || "";
+
+      // OPTIMIZE using ACTUAL ROAD DISTANCES from Mappls API
+      console.log(`[ROUTE] [${logId}] 🧭 Optimizing route using actual road distances...`);
+      const optimizedOrder = await optimizeRouteByActualDistance(points, apiKey);
+      const optimizedPoints = optimizedOrder.map((idx) => points[idx]);
+
+      // Build the Mappls Route Advance URL with optimized order
+      // Format: lng,lat;lng,lat;...
+      const optimizedCoords = optimizedPoints
+        .map((p) => `${p.lng},${p.lat}`)
+        .join(";");
+
+      const routeUrl =
+        `https://apis.mappls.com/advancedmaps/v1/${apiKey}/route_adv/driving/${optimizedCoords}` +
+        `?geometries=geojson&overview=full&steps=true`;
+
+      globalHitCount++;
+      console.log(
+        `[ROUTE] [${logId}] [Hit #${globalHitCount}] 🌍 Fetching final optimized route...`
+      );
+
+      const routeRes = await fetch(routeUrl, { cache: "no-store" });
+
+      // ── Parse Response ──────────────────────────────────────────────────
+      let routeData;
+      const contentType = routeRes.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        routeData = await routeRes.json();
+      } else {
+        const text = await routeRes.text();
+        throw new Error(`Mappls API returned non-JSON: ${text.substring(0, 100)}`);
+      }
+
+      if (!routeRes.ok || !routeData.routes?.[0]) {
+        throw new Error(
+          `Mappls route failed (HTTP ${routeRes.status}): ${JSON.stringify(routeData)}`
+        );
+      }
+
+      const route = routeData.routes[0];
+
+      // ── Shape the Result ────────────────────────────────────────────────
+      // We aggregate coordinates from all legs to ensure no segment is missing
+      const allCoords = [];
+      if (route.legs) {
+        route.legs.forEach(leg => {
+          if (leg.steps) {
+            leg.steps.forEach(step => {
+              if (step.geometry?.coordinates) {
+                step.geometry.coordinates.forEach(c => allCoords.push([c[1], c[0]]));
+              }
+            });
+          } else if (leg.annotation?.nodes) {
+             // Fallback for some API versions
+          }
+        });
+      }
+      
+      // If legs aggregation failed, fallback to the overview geometry
+      const finalPath = allCoords.length > 0 
+        ? allCoords 
+        : (route.geometry?.coordinates?.map((c) => [c[1], c[0]]) || []);
+
+      const finalResult = {
+        path: finalPath,
+        distance: route.distance / 1000,       // metres → km
+        time: route.duration,                  // seconds
+        legs: (route.legs || []).map((leg) => ({
+          distance: (leg.distance || 0) / 1000, // metres → km
+          duration: leg.duration || 0,           // seconds
+        })),
+        optimizedOrder,
+        status: "SUCCESS",
+      };
+
+
+      // Populate cache for future identical requests
+      responseCache.set(payloadHash, { data: finalResult, timestamp: Date.now() });
+
+      return finalResult;
+    })();
+
+    // Register this promise so concurrent identical requests can join it
+    sharedRequests.set(payloadHash, executeRequest);
+
+    try {
+      const result = await executeRequest;
+      return NextResponse.json(result);
+    } finally {
+      // Always remove from the coalescing map once settled (success or error)
+      sharedRequests.delete(payloadHash);
+    }
+  } catch (error) {
+    console.error("[ROUTE] Unhandled error:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

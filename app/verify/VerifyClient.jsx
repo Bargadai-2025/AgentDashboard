@@ -123,9 +123,12 @@ export default function VerifyClient() {
             script.onload = async () => {
                 const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
                 try {
-                    await window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-                    await window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-                    await window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+                    // Load models in parallel for faster initialization
+                    await Promise.all([
+                        window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                        window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                        window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                    ]);
                     console.log("✅ FaceAPI Ready");
                 } catch (e) {
                     console.warn("❌ FaceAPI load failed", e);
@@ -249,15 +252,31 @@ export default function VerifyClient() {
         const b64 = canvas.toDataURL("image/jpeg");
         setCapturedImage(b64);
 
-        // Score logic
+        // Face matching score calculation
         let matchScore = 0;
         if (foundAgent?.image && window.faceapi) {
             try {
                 const agentImg = await window.faceapi.fetchImage(foundAgent.image);
-                const agentDet = await window.faceapi.detectSingleFace(agentImg, new window.faceapi.TinyFaceDetectorOptions()).withFaceDescriptor();
+                const agentDet = await window.faceapi
+                    .detectSingleFace(agentImg, new window.faceapi.TinyFaceDetectorOptions({ inputSize: 160 }))
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+                
                 if (agentDet) {
                     const dist = window.faceapi.euclideanDistance(liveDescriptor, agentDet.descriptor);
-                    matchScore = Math.max(0, Math.round((1 - dist) * 100));
+                    
+                    // OPTIMIZED THRESHOLDS for higher accuracy
+                    const STRICT_THRESHOLD = 0.35;
+                    const ACCEPTABLE_THRESHOLD = 0.45;
+                    
+                    // Better scoring formula: 0 distance = 100%, 0.45 distance = 0%
+                    if (dist < ACCEPTABLE_THRESHOLD) {
+                        matchScore = Math.round((1 - dist / ACCEPTABLE_THRESHOLD) * 100);
+                    } else {
+                        matchScore = 0;
+                    }
+                    
+                    console.log(`[FACE MATCH] Distance: ${dist.toFixed(4)}, Score: ${matchScore}%, Distance Threshold: ${ACCEPTABLE_THRESHOLD}`);
                 }
             } catch (e) { console.warn(e); }
         }
