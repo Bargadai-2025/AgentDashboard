@@ -128,9 +128,9 @@ export const agents = [
 
 // Static office location — shared by all agents
 export const OFFICE = {
-  // lat: 19.1133869510231,
-  lat: 19.221205362778235,
-  lng: 73.09295477236344,
-  // lng: 72.91810580467191,
+  lat: 19.1133869510231,
+  // lat: 19.221205362778235,
+  // lng: 73.09295477236344,
+  lng: 72.91810580467191,
   name: "Bargad HQ",
 };
