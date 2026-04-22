@@ -44,8 +44,14 @@ export default function SuperAdminForm() {
                 return;
             }
 
-            // imagePreview is already a base64 data URI — safe to send to Cloudinary
-            const agentPayload = { ...formData, image: imagePreview };
+            // Send only required fields for agent creation
+            const agentPayload = {
+                name: formData.name,
+                location: formData.location,
+                image: imagePreview,
+                id: formData.id || undefined,
+                address: formData.address || undefined
+            };
             let res = await fetch('/api/agent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

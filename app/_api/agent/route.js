@@ -7,7 +7,14 @@ import cloudinary from "../../lib/cloudinary.js";
 export async function POST(req) {
     await DBConnection();
     try {
-        const { name, image, location } = await req.json();
+        const { name, image, location, id, address } = await req.json();
+
+        if (!name || !location) {
+            return NextResponse.json(
+                { status: 400, msg: "Name and location are required." },
+                { status: 400 }
+            );
+        }
 
         let imageUrl = "";
         if (image) {
@@ -24,14 +31,19 @@ export async function POST(req) {
             if (parts.length === 2) { [lat, lng] = parts; }
         }
 
-        const autoAddress = await reverseGeocode(lat, lng);
+        const autoAddress = address || await reverseGeocode(lat, lng);
 
-        const agent = await AgentModel.create({
+        const agentData = {
             name,
             image: imageUrl,
             location,
             address: autoAddress
-        });
+        };
+
+        // Add optional fields if provided
+        if (id) agentData.id = id;
+
+        const agent = await AgentModel.create(agentData);
         return NextResponse.json({ status: 200, msg: "Agent created successfully!", data: agent });
     } catch (error) {
         console.error("POST /api/agent error:", error);
