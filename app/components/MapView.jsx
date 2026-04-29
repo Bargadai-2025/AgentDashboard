@@ -1,12 +1,57 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
+function hideMapplsLogoIn(root) {
+  if (!root) return;
+  const selectors = [
+    'img[id^="watermark_logo"]',
+    'img[alt="mappls.com"]',
+    "a.mapboxgl-ctrl-logo",
+    ".cst-attrib-cont > a:first-of-type",
+  ].join(", ");
+  root.querySelectorAll(selectors).forEach((el) => {
+    el.style.setProperty("display", "none", "important");
+    el.style.setProperty("visibility", "hidden", "important");
+    el.style.setProperty("pointer-events", "none", "important");
+    el.style.setProperty("width", "0", "important");
+    el.style.setProperty("height", "0", "important");
+    el.style.setProperty("opacity", "0", "important");
+  });
+}
+
 export default function MapView({ points, routePath, visitedPath, deviationPath, deviationPaths, activeDeviation, simulationPaths, activeSimulation, agentPosition, result, onMarkerClick }) {
   const mapContainer = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
   const simMarkerRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+
+  useEffect(() => {
+    const root = mapContainer.current;
+    if (!root) return;
+    let debounce = 0;
+    const run = () => {
+      window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => hideMapplsLogoIn(root), 80);
+    };
+    hideMapplsLogoIn(root);
+    const obs = new MutationObserver(run);
+    obs.observe(root, { childList: true, subtree: true });
+    return () => {
+      window.clearTimeout(debounce);
+      obs.disconnect();
+    };
+  }, [mapLoaded]);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapInstance.current || !mapContainer.current) return;
+    const map = mapInstance.current;
+    const root = mapContainer.current;
+    const bump = () => hideMapplsLogoIn(root);
+    map.on("moveend", bump);
+    bump();
+    return () => map.off("moveend", bump);
+  }, [mapLoaded]);
 
   useEffect(() => {
     if (!window.mappls) return;
